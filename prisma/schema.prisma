@@ -1,0 +1,468 @@
+// Fantasy Cricket Team Generation Platform
+// Comprehensive schema covering all backend features
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// USERS & AUTH
+// ============================================================
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  phone         String?
+  role          String   @default("USER") // USER | ADMIN | SUPER_ADMIN
+  avatarUrl     String?
+  credits       Int      @default(50) // generation credits
+  fcmToken      String? // push notification token
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  subscription  Subscription?
+  licenses      License[]
+  generatedTeams GeneratedTeam[]
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  testRuns      TestRun[]
+  fantasyAccounts FantasyAccount[]
+  sessionTokens   SessionToken[]
+  transfers       TransferHistory[]
+
+  @@index([role])
+}
+
+// ============================================================
+// SUBSCRIPTION & LICENSE SYSTEM
+// ============================================================
+
+model Plan {
+  id              String   @id @default(cuid())
+  name            String   @unique // FREE | PRO | ELITE | MASTERY
+  displayName     String
+  description     String
+  priceInr        Int      @default(0)
+  durationDays    Int      @default(30)
+  creditsPerDay   Int      @default(10)
+  maxTeamsPerMatch Int     @default(20)
+  features        String   @default("[]") // JSON array of feature strings
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  subscriptions   Subscription[]
+  licenses        License[]
+}
+
+model Subscription {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId        String
+  plan          Plan     @relation(fields: [planId], references: [id])
+  status        String   @default("ACTIVE") // ACTIVE | EXPIRED | CANCELLED | SUSPENDED
+  startsAt      DateTime @default(now())
+  expiresAt     DateTime
+  autoRenew     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+}
+
+model License {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
+  planId        String
+  plan          Plan     @relation(fields: [planId], references: [id])
+  status        String   @default("UNUSED") // UNUSED | ACTIVE | EXPIRED | REVOKED
+  machineId     String?
+  activatedAt   DateTime?
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+}
+
+// ============================================================
+// MATCHES & PLAYERS (Live Match API Sync)
+// ============================================================
+
+model Match {
+  id              String   @id @default(cuid())
+  externalId      String   @unique // id from upstream cricket API
+  name            String
+  shortName       String
+  series          String
+  format          String   @default("T20") // T20 | ODI | TEST
+  team1Name       String
+  team1Short      String
+  team1Color      String   @default("#1e293b")
+  team2Name       String
+  team2Short      String
+  team2Color      String   @default("#475569")
+  venue           String
+  city            String
+  startAt         DateTime
+  status          String   @default("UPCOMING") // UPCOMING | TOSS_DONE | LIVE | COMPLETED | ABANDONED
+  tossWinner      String?
+  tossDecision    String?  // BAT | BOWL
+  result          String?
+  syncSource      String   @default("mock-cricket-api")
+  lastSyncedAt    DateTime @default(now())
+  playingXINamed  Boolean  @default(false)
+  playingXIAnnouncedAt DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  players         Player[]
+  playingXI       PlayingXI[]
+  generatedTeams  GeneratedTeam[]
+  syncJobs        SyncJob[]
+  notifications   Notification[]
+
+  @@index([status])
+  @@index([startAt])
+}
+
+model Player {
+  id            String   @id @default(cuid())
+  matchId       String
+  match         Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  externalId    String
+  name          String
+  shortName     String
+  team          String   // team short name
+  role          String   // BAT | BOWL | AR | WK
+  battingStyle  String?
+  bowlingStyle  String?
+  credit        Float    @default(8.0) // fantasy credit
+  selectedBy    Float    @default(0.0) // % selection
+  formScore     Float    @default(50.0) // 0-100 recent form
+  isPlaying     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  playingXI     PlayingXI[]
+  teamEntries   GeneratedTeamPlayer[]
+
+  @@unique([matchId, externalId])
+  @@index([matchId, team])
+  @@index([matchId, role])
+}
+
+model PlayingXI {
+  id           String   @id @default(cuid())
+  matchId      String
+  match        Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  playerId     String
+  player       Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  announcedAt  DateTime @default(now())
+  source       String   @default("auto") // auto | manual | api
+
+  @@unique([matchId, playerId])
+  @@index([matchId])
+}
+
+// ============================================================
+// AI TEAM GENERATION (GL/SL/H2H)
+// ============================================================
+
+model GeneratedTeam {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchId       String
+  match         Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  strategy      String   // GL | SL | H2H
+  teamName      String
+  captainId     String
+  viceCaptainId String
+  totalCredit   Float
+  team1Count    Int
+  team2Count    Int
+  wkCount       Int
+  batCount      Int
+  arCount       Int
+  bowlCount     Int
+  projectedScore Float   @default(0)
+  uniquenessScore Float  @default(0)
+  riskLevel     String   @default("MEDIUM") // LOW | MEDIUM | HIGH
+  combinationKey String  // e.g. "1 WK, 4 BAT, 3 AR, 3 BOWL"
+  meta          String   @default("{}") // JSON: reasoning, factors, etc.
+  createdAt     DateTime @default(now())
+
+  players       GeneratedTeamPlayer[]
+
+  @@index([matchId, strategy])
+  @@index([userId])
+}
+
+model GeneratedTeamPlayer {
+  id              String   @id @default(cuid())
+  teamId          String
+  team            GeneratedTeam @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  playerId        String
+  player          Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  isCaptain       Boolean  @default(false)
+  isViceCaptain   Boolean  @default(false)
+  sortOrder       Int      @default(0)
+
+  @@unique([teamId, playerId])
+  @@index([teamId])
+}
+
+// ============================================================
+// BACKGROUND JOBS / QUEUE
+// ============================================================
+
+model SyncJob {
+  id            String   @id @default(cuid())
+  matchId       String
+  match         Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  jobType       String   // SYNC_MATCH | UPDATE_PLAYING_XI | REGENERATE_TEAMS | SEND_NOTIFICATION | CLEANUP
+  status        String   @default("QUEUED") // QUEUED | RUNNING | SUCCESS | FAILED | RETRYING
+  priority      Int      @default(5)
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(3)
+  payload       String   @default("{}") // JSON
+  result        String?
+  error         String?
+  scheduledAt   DateTime @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([status, scheduledAt])
+  @@index([jobType])
+}
+
+// ============================================================
+// AUDIT LOGS
+// ============================================================
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
+  action        String   // LOGIN | GENERATE_TEAM | SYNC_MATCH | UPDATE_XI | TOSS_UPDATE | LICENSE_ACTIVATE | ADMIN_ACTION etc.
+  entity        String?
+  entityId      String?
+  ipAddress     String?
+  userAgent     String?
+  details       String   @default("{}") // JSON
+  severity      String   @default("INFO") // INFO | WARN | ERROR | CRITICAL
+  createdAt     DateTime @default(now())
+
+  @@index([action])
+  @@index([severity])
+  @@index([createdAt])
+}
+
+// ============================================================
+// NOTIFICATIONS & PUSH
+// ============================================================
+
+model Notification {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  matchId       String?
+  match         Match?   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  type          String   // TOSS_UPDATE | XI_ANNOUNCED | MATCH_LIVE | TEAM_GENERATED | SYSTEM | RENEWAL
+  title         String
+  body          String
+  data          String   @default("{}") // JSON payload
+  channel       String   @default("IN_APP") // IN_APP | PUSH | EMAIL
+  isRead        Boolean  @default(false)
+  sentAt        DateTime @default(now())
+  readAt        DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([type])
+}
+
+// ============================================================
+// MONITORING & ERROR TRACKING
+// ============================================================
+
+model ErrorLog {
+  id            String   @id @default(cuid())
+  level         String   @default("ERROR") // ERROR | WARN | FATAL
+  source        String   @default("api") // api | job | cache | db | ui
+  message       String
+  stack         String?
+  context       String   @default("{}") // JSON
+  path          String?
+  method        String?
+  statusCode    Int?
+  userId        String?
+  resolved      Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  @@index([level, resolved])
+  @@index([createdAt])
+}
+
+model SystemMetric {
+  id            String   @id @default(cuid())
+  name          String   // cache.hit_rate | queue.depth | api.latency | db.connections | generations.count
+  value         Float
+  unit          String   @default("count")
+  tags          String   @default("{}") // JSON
+  recordedAt    DateTime @default(now())
+
+  @@index([name, recordedAt])
+}
+
+// ============================================================
+// TEST COVERAGE TRACKING
+// ============================================================
+
+model TestRun {
+  id            String   @id @default(cuid())
+  userId        String?
+  user          User?    @relation(fields: [userId], references: [id])
+  suite         String   // team-generator | cache | jobs | api | audit
+  name          String
+  status        String   // PASS | FAIL | SKIP
+  durationMs    Int      @default(0)
+  assertions    Int      @default(0)
+  error         String?
+  meta          String   @default("{}")
+  createdAt     DateTime @default(now())
+
+  @@index([suite, status])
+  @@index([createdAt])
+}
+
+// ============================================================
+// DIRECT FANTASY TRANSFER SYSTEM
+// (Dream11 / My11Circle) - OTP login, bulk transfer, queue, verification
+// ============================================================
+
+model FantasyAccount {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform      String   // DREAM11 | MY11CIRCLE
+  mobile        String   // registered mobile number
+  displayName   String?  // name returned by platform
+  avatarUrl     String?
+  platformUserId String? // internal id on platform
+  status        String   @default("ACTIVE") // ACTIVE | SESSION_EXPIRED | BLOCKED | REVOKED
+  isActive      Boolean  @default(true)
+  lastVerifiedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessionTokens SessionToken[]
+  transfers     TransferHistory[]
+  queueItems    TransferQueue[]
+
+  @@unique([userId, platform, mobile])
+  @@index([userId])
+  @@index([platform, status])
+}
+
+model SessionToken {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId     String
+  account       FantasyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  platform      String
+  // encrypted token blob (access + refresh bundled as JSON, AES-encrypted)
+  encryptedToken String
+  tokenIv        String
+  expiresAt     DateTime
+  refreshExpiresAt DateTime?
+  lastRefreshedAt DateTime?
+  status        String   @default("ACTIVE") // ACTIVE | EXPIRED | REFRESHING | REVOKED
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([accountId])
+}
+
+model TransferQueue {
+  id            String   @id @default(cuid())
+  userId        String
+  accountId     String
+  account       FantasyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  matchId       String?  // optional link to Match
+  matchName     String
+  platform      String
+  mode          String   // CREATE | REPLACE | REPLACE_SPECIFIC | AUTO_REPLACE
+  totalTeams    Int
+  completedCount Int     @default(0)
+  successCount  Int      @default(0)
+  failedCount   Int      @default(0)
+  status        String   @default("QUEUED") // QUEUED | PROCESSING | COMPLETED | FAILED | PAUSED | CANCELLED
+  priority      Int      @default(5)
+  concurrency   Int      @default(5)
+  retriesUsed   Int      @default(0)
+  maxRetries    Int      @default(3)
+  replaceTeamIds String  @default("[]") // JSON array of specific team ids to replace
+  teamTemplate  String   @default("{}") // JSON: the team to transfer (players, C, VC)
+  meta          String   @default("{}")
+  scheduledAt   DateTime @default(now())
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  transfers     TransferHistory[]
+
+  @@index([status, scheduledAt])
+  @@index([userId])
+  @@index([accountId])
+}
+
+model TransferHistory {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accountId     String
+  account       FantasyAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  queueId       String?
+  queue         TransferQueue? @relation(fields: [queueId], references: [id], onDelete: SetNull)
+  matchId       String?
+  matchName     String
+  platform      String
+  mode          String   // CREATE | REPLACE | REPLACE_SPECIFIC | AUTO_REPLACE
+  status        String   @default("PENDING") // PENDING | PROCESSING | SUCCESS | FAILED | VERIFIED | RETRYING
+  teamIndex     Int      @default(0) // which team in the bulk batch
+  platformTeamId String? // team id returned by platform
+  captainName   String?
+  viceCaptainName String?
+  playerCount   Int      @default(11)
+  attempts      Int      @default(0)
+  maxAttempts   Int      @default(3)
+  verificationStatus String? // VERIFIED | FAILED | null
+  verificationDetails String @default("{}") // JSON
+  error         String?
+  errorCode     String?  // INVALID_OTP | EXPIRED_SESSION | INVALID_TOKEN | NETWORK_FAILURE | RATE_LIMIT | PLATFORM_TIMEOUT | DUPLICATE_TRANSFER | QUEUE_FAILURE
+  startedAt     DateTime?
+  completedAt   DateTime?
+  verifiedAt    DateTime?
+  createdAt     DateTime @default(now())
+
+  @@index([userId, status])
+  @@index([queueId])
+  @@index([platform, status])
+  @@index([createdAt])
+}
