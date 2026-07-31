@@ -1,7 +1,7 @@
 'use client'
 /**
  * Auto-auth provider. No login page — creates/uses a default user automatically.
- * The app is directly accessible without credentials.
+ * Resilient: if auto-login fails, still renders the app (public data works without auth).
  */
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import { api, setToken } from '@/lib/api-client'
@@ -18,6 +18,7 @@ interface AuthCtx {
   user: AuthUser | null
   loading: boolean
   refresh: () => Promise<void>
+  retry: () => void
 }
 
 const Ctx = createContext<AuthCtx>(null!)
@@ -26,26 +27,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
 
+  const doAutoLogin = async () => {
+    try {
+      const res: any = await api.post('/api/auth/auto-login', {})
+      if (res?.accessToken) {
+        setToken(res.accessToken, res.refreshToken, res.user)
+        setUser(res.user)
+        return true
+      }
+      return false
+    } catch (e) {
+      console.error('auto-login failed:', e)
+      return false
+    }
+  }
+
   useEffect(() => {
     let cancelled = false
     const init = async () => {
-      try {
-        // Auto-login: get or create a default session user (no credentials needed)
-        const res: any = await api.post('/api/auth/auto-login', {})
-        if (!cancelled) {
-          // Store the token so all subsequent API calls are authenticated
-          setToken(res.accessToken, res.refreshToken, res.user)
-          setUser(res.user)
-        }
-      } catch {
-        if (!cancelled) setUser(null)
-      } finally {
+      // Safety timeout: never spin more than 5 seconds
+      const timeout = setTimeout(() => {
         if (!cancelled) setLoading(false)
+      }, 5000)
+
+      const ok = await doAutoLogin()
+      clearTimeout(timeout)
+      if (!cancelled) {
+        setLoading(false)
       }
     }
     init()
     return () => { cancelled = true }
   }, [])
+
+  const retry = () => {
+    setLoading(true)
+    void doAutoLogin().then(() => setLoading(false))
+  }
 
   const refresh = async () => {
     try {
@@ -54,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch { /* ignore */ }
   }
 
-  return <Ctx.Provider value={{ user, loading, refresh }}>{children}</Ctx.Provider>
+  return <Ctx.Provider value={{ user, loading, refresh, retry }}>{children}</Ctx.Provider>
 }
 
 export function useAuth() {

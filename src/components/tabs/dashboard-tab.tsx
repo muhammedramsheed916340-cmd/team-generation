@@ -12,14 +12,24 @@ export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }
   const [matches, setMatches] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const load = async () => {
+  const load = async (retries = 2) => {
     setLoading(true)
-    try {
-      const [m, matchesRes] = await Promise.all([healthApi.metrics(), matchesApi.list()])
-      setMetrics(m)
-      setMatches(matchesRes.matches)
-    } catch (e: any) { toast.error(e.message) }
-    finally { setLoading(false) }
+    for (let i = 0; i <= retries; i++) {
+      try {
+        const [m, matchesRes] = await Promise.all([healthApi.metrics(), matchesApi.list()])
+        setMetrics(m)
+        setMatches(matchesRes.matches)
+        setLoading(false)
+        return
+      } catch (e: any) {
+        if (i < retries) {
+          await new Promise(r => setTimeout(r, 800 * (i + 1)))
+        } else {
+          toast.error('Failed to load data: ' + e.message)
+          setLoading(false)
+        }
+      }
+    }
   }
 
   useEffect(() => { void load() }, [])
@@ -61,6 +71,14 @@ export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }
         <div className="grid md:grid-cols-2 gap-3">
           {loading ? (
             [...Array(4)].map((_, i) => <div key={i} className="h-32 bg-[#202124] animate-pulse rounded-xl" />)
+          ) : matches.length === 0 ? (
+            <div className="col-span-2 text-center py-8 bg-[#202124] rounded-xl border border-[#3c4043]">
+              <Calendar className="size-8 mx-auto mb-2 text-[#9aa0a6]" />
+              <p className="text-sm text-[#9aa0a6] mb-3">No matches available</p>
+              <Button size="sm" variant="outline" onClick={() => load()} className="border-[#3c4043] text-[#e8eaed] hover:bg-[#28292c]">
+                <RefreshCw className="size-3.5" /> Refresh
+              </Button>
+            </div>
           ) : matches.slice(0, 6).map((m) => (
             <MatchCard key={m.id} match={m} onNavigate={onNavigate} />
           ))}
