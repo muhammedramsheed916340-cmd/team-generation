@@ -3,22 +3,20 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { RefreshCw, Calendar, MapPin, Users, CheckCircle2, Dice5, Sparkles, Brain, Download, Search } from 'lucide-react'
-import { matchesApi } from '@/lib/api-client'
+import { RefreshCw, Calendar, Users, CheckCircle2, Sparkles, Search, Radio, Loader2 } from 'lucide-react'
+import { realApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 import { PlayerProfileDialog, PlayerProfile } from '@/components/app/player-profile-dialog'
 
 export function MatchesTab() {
   const [matches, setMatches] = useState<any[]>([])
-  const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<string | null>(null)
-  const [players, setPlayers] = useState<any[]>([])
-  const [xi, setXi] = useState<any[]>([])
+  const [matchDetail, setMatchDetail] = useState<any>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
   const [profile, setProfile] = useState<PlayerProfile | null>(null)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('ALL')
@@ -26,174 +24,150 @@ export function MatchesTab() {
   const load = async () => {
     setLoading(true)
     try {
-      const res = await matchesApi.list(filter === 'all' ? undefined : filter)
-      setMatches(res.matches)
-      if (res.matches[0] && !selected) setSelected(res.matches[0].id)
+      const res = await realApi.matches('cricket')
+      setMatches(res.matches || [])
+      if (res.matches[0]) selectMatch(res.matches[0].id)
     } catch (e: any) { toast.error(e.message) }
     finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [filter])
-
-  useEffect(() => {
-    if (!selected) return
+  const selectMatch = async (id: string) => {
+    setSelected(id)
+    setDetailLoading(true)
+    setMatchDetail(null)
     setSearch('')
-    Promise.all([matchesApi.players(selected), matchesApi.playingXI(selected)])
-      .then(([p, x]) => { setPlayers(p.players); setXi(x.playingXI) })
-      .catch((e) => toast.error(e.message))
-  }, [selected])
-
-  const sync = async () => {
-    try { await matchesApi.sync(); toast.success('Matches synced'); load() }
-    catch (e: any) { toast.error(e.message) }
+    try {
+      const res = await realApi.match(id)
+      setMatchDetail(res.match)
+    } catch (e: any) { toast.error(e.message) }
+    finally { setDetailLoading(false) }
   }
 
-  const announceXI = async (id: string) => {
-    try { await matchesApi.announceXI(id); toast.success('Playing XI announced'); load(); if (selected === id) { const x = await matchesApi.playingXI(id); setXi(x.playingXI) } }
-    catch (e: any) { toast.error(e.message) }
-  }
+  useEffect(() => { void load() }, [])
 
-  const toss = async (id: string) => {
-    try { const r = await matchesApi.toss(id); toast.success(`Toss: ${r.winner} chose to ${r.decision}`); load() }
-    catch (e: any) { toast.error(e.message) }
-  }
+  // Flatten players from match detail
+  const allPlayers = matchDetail ? [
+    ...(matchDetail.players?.team1 || []).map((p: any) => ({ ...p, team: matchDetail.team1 })),
+    ...(matchDetail.players?.team2 || []).map((p: any) => ({ ...p, team: matchDetail.team2 })),
+  ] : []
 
-  const sel = matches.find((m) => m.id === selected)
-  const xiIds = new Set(xi.map((x) => x.playerId))
-  const filteredPlayers = players.filter((p) => {
-    const matchesSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.shortName.toLowerCase().includes(search.toLowerCase())
+  const filteredPlayers = allPlayers.filter((p) => {
+    const matchesSearch = !search || p.name.toLowerCase().includes(search.toLowerCase())
     const matchesRole = roleFilter === 'ALL' || p.role === roleFilter
     return matchesSearch && matchesRole
   })
 
+  const sel = matches.find((m) => m.id === selected)
+
   return (
     <div className="grid md:grid-cols-2 gap-4">
       {/* Matches list */}
-      <Card className="flex flex-col max-h-[calc(100vh-12rem)]">
+      <Card className="bg-[#202124] border-[#3c4043] flex flex-col max-h-[calc(100vh-12rem)]">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-base flex items-center gap-2"><Calendar className="size-4" /> Matches</CardTitle>
-          <Button variant="outline" size="sm" onClick={sync} disabled={loading}><RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} /> Sync</Button>
+          <CardTitle className="text-base flex items-center gap-2"><Radio className="size-4 text-[#d93025]" /> Real Matches</CardTitle>
+          <Button variant="outline" size="sm" onClick={load} disabled={loading} className="border-[#3c4043] text-[#e8eaed] hover:bg-[#28292c]">
+            <RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} /> Sync
+          </Button>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden p-0">
-          <div className="px-4 pb-2">
-            <Tabs value={filter} onValueChange={setFilter}>
-              <TabsList className="w-full">
-                <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="UPCOMING">Upcoming</TabsTrigger>
-                <TabsTrigger value="LIVE">Live</TabsTrigger>
-                <TabsTrigger value="COMPLETED">Done</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
           <ScrollArea className="h-[calc(100vh-18rem)] px-4">
             <div className="space-y-2 pb-4">
-              {matches.map((m) => (
+              {loading ? (
+                [...Array(4)].map((_, i) => <div key={i} className="h-24 bg-[#28292c] animate-pulse rounded-lg" />)
+              ) : matches.map((m) => (
                 <button
                   key={m.id}
-                  onClick={() => setSelected(m.id)}
-                  className={`w-full text-left p-3 rounded-lg border transition-colors ${selected === m.id ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' : 'hover:bg-muted/50'}`}
+                  onClick={() => selectMatch(m.id)}
+                  className={`w-full text-left p-3 rounded-lg border transition-colors ${selected === m.id ? 'border-[#563d7c] bg-[#563d7c]/10' : 'border-[#3c4043] hover:bg-[#28292c]'}`}
                 >
-                  <div className="flex items-center justify-between mb-1">
-                    <p className="font-semibold text-sm">{m.shortName}</p>
-                    <Badge variant={m.status === 'LIVE' ? 'destructive' : m.status === 'COMPLETED' ? 'secondary' : 'default'}>{m.status}</Badge>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      {m.team1Image && <img src={m.team1Image} alt={m.team1} className="size-8 rounded-full" />}
+                      <span className="font-bold text-sm">{m.team1}</span>
+                      <span className="text-[#9aa0a6] text-xs">vs</span>
+                      {m.team2Image && <img src={m.team2Image} alt={m.team2} className="size-8 rounded-full" />}
+                      <span className="font-bold text-sm">{m.team2}</span>
+                    </div>
+                    {m.lineupOut && <Badge className="bg-[#1e8e3e]/20 text-[#1e8e3e] text-[10px]">XI Out</Badge>}
                   </div>
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="size-3" /> {m.venue}, {m.city}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{new Date(m.startAt).toLocaleString()}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    {m.playingXINamed && <Badge variant="outline" className="text-emerald-600 text-xs"><CheckCircle2 className="size-3 mr-1" /> XI</Badge>}
-                    {m.tossWinner && <Badge variant="outline" className="text-amber-600 text-xs"><Dice5 className="size-3 mr-1" /> {m.tossWinner} {m.tossDecision}</Badge>}
-                    <span className="text-xs text-muted-foreground ml-auto">{m._count?.players || 0} players</span>
-                  </div>
+                  <p className="text-xs text-[#9aa0a6] truncate">{m.series}</p>
+                  <p className="text-xs text-[#9aa0a6]">{new Date(m.matchTime).toLocaleString()}</p>
                 </button>
               ))}
-              {!loading && matches.length === 0 && <p className="text-center text-sm text-muted-foreground py-8">No matches found</p>}
             </div>
           </ScrollArea>
         </CardContent>
       </Card>
 
       {/* Match detail */}
-      <Card className="flex flex-col max-h-[calc(100vh-12rem)]">
+      <Card className="bg-[#202124] border-[#3c4043] flex flex-col max-h-[calc(100vh-12rem)]">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">{sel?.shortName || 'Select a match'}</CardTitle>
-            {sel && (
-              <div className="flex gap-1 flex-wrap">
-                <Button size="sm" variant="outline" onClick={() => announceXI(sel.id)} disabled={sel.playingXINamed}>
-                  <Users className="size-3.5" /> Update XI
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => toss(sel.id)} disabled={!!sel.tossWinner}>
-                  <Dice5 className="size-3.5" /> Toss
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => window.open(`/api/matches/${sel.id}/predict`, '_blank')} className="text-emerald-600">
-                  <Brain className="size-3.5" /> Predict
-                </Button>
-              </div>
+            <CardTitle className="text-base">
+              {matchDetail ? `${matchDetail.team1} vs ${matchDetail.team2}` : 'Select a match'}
+            </CardTitle>
+            {matchDetail && (
+              <Badge variant="outline" className={`text-[10px] ${matchDetail.lineupOut ? 'text-[#1e8e3e] border-[#1e8e3e]/40' : 'text-[#f9ab00] border-[#f9ab00]/40'}`}>
+                {matchDetail.lineupOut ? '✓ XI Out' : '⏳ XI Pending'}
+              </Badge>
             )}
           </div>
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
-          {sel ? (
+          {detailLoading ? (
+            <div className="text-center py-12"><Loader2 className="size-8 animate-spin text-[#563d7c] mx-auto" /></div>
+          ) : matchDetail ? (
             <ScrollArea className="h-[calc(100vh-16rem)]">
               <div className="space-y-3 pb-4">
+                {/* Teams */}
                 <div className="grid grid-cols-2 gap-2">
-                  <TeamBox name={sel.team1Name} short={sel.team1Short} color={sel.team1Color} count={players.filter((p) => p.team === sel.team1Short).length} />
-                  <TeamBox name={sel.team2Name} short={sel.team2Short} color={sel.team2Color} count={players.filter((p) => p.team === sel.team2Short).length} />
+                  <TeamBox name={matchDetail.team1} image={matchDetail.team1Image} count={matchDetail.players?.team1?.length || 0} />
+                  <TeamBox name={matchDetail.team2} image={matchDetail.team2Image} count={matchDetail.players?.team2?.length || 0} />
                 </div>
-                <div className="flex items-center justify-between text-sm p-2 rounded bg-muted/50">
-                  <span className="text-muted-foreground">Series</span>
-                  <span className="font-medium">{sel.series} · {sel.format}</span>
-                </div>
-                {sel.tossWinner && (
-                  <div className="flex items-center justify-between text-sm p-2 rounded bg-amber-50 dark:bg-amber-950/30">
-                    <span className="text-muted-foreground">Toss</span>
-                    <span className="font-medium text-amber-700 dark:text-amber-400">{sel.tossWinner} won & chose to {sel.tossDecision}</span>
+
+                {/* Search + filter */}
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#9aa0a6]" />
+                    <Input placeholder="Search player..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 pl-8 text-sm bg-[#131314] border-[#3c4043] text-white" />
                   </div>
-                )}
+                  <Select value={roleFilter} onValueChange={setRoleFilter}>
+                    <SelectTrigger className="w-24 h-8 text-xs bg-[#131314] border-[#3c4043] text-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ALL">All</SelectItem>
+                      <SelectItem value="WK">WK</SelectItem>
+                      <SelectItem value="BAT">BAT</SelectItem>
+                      <SelectItem value="AR">AR</SelectItem>
+                      <SelectItem value="BOWL">BOWL</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Squad */}
                 <div>
                   <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                    <Sparkles className="size-4" /> Squad ({filteredPlayers.length})
-                    {sel.playingXINamed && <Badge variant="outline" className="text-emerald-600">XI Named</Badge>}
+                    <Sparkles className="size-4 text-[#563d7c]" /> Squad ({filteredPlayers.length})
                   </h4>
-                  {/* Search + filter */}
-                  <div className="flex gap-2 mb-2">
-                    <div className="relative flex-1">
-                      <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                      <Input placeholder="Search player..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 pl-8 text-sm" />
-                    </div>
-                    <Select value={roleFilter} onValueChange={setRoleFilter}>
-                      <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="ALL">All</SelectItem>
-                        <SelectItem value="WK">WK</SelectItem>
-                        <SelectItem value="BAT">BAT</SelectItem>
-                        <SelectItem value="AR">AR</SelectItem>
-                        <SelectItem value="BOWL">BOWL</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div className="space-y-1">
                     {filteredPlayers.map((p) => (
                       <button
                         key={p.id}
                         onClick={() => setProfile({
-                          id: p.id, name: p.name, shortName: p.shortName, team: p.team, role: p.role,
-                          battingStyle: p.battingStyle, bowlingStyle: p.bowlingStyle, credit: p.credit,
-                          selectedBy: p.selectedBy, formScore: p.formScore, isPlaying: p.isPlaying,
+                          id: String(p.id), name: p.name, shortName: p.name.split(' ').map((w: string) => w[0]).join(''),
+                          team: p.team, role: p.role, credit: p.credits, selectedBy: p.selectedBy,
+                          formScore: p.points, isPlaying: p.playing, battingStyle: null, bowlingStyle: p.playerType,
                         })}
-                        className={`w-full flex items-center justify-between p-1.5 rounded text-sm transition-colors hover:bg-muted/80 ${xiIds.has(p.id) ? 'bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900' : 'border border-transparent'}`}
+                        className={`w-full flex items-center justify-between p-1.5 rounded text-sm transition-colors hover:bg-[#28292c] ${p.playing ? 'bg-[#1e8e3e]/10 border border-[#1e8e3e]/30' : 'border border-transparent'}`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${p.team === sel.team1Short ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'}`}>{p.team}</span>
+                          {p.image && <img src={p.image} alt={p.name} className="size-6 rounded-full" />}
                           <span className="font-medium">{p.name}</span>
-                          {p.formScore > 70 && <span title="High form" className="size-1.5 rounded-full bg-emerald-500" />}
+                          {p.playing && <CheckCircle2 className="size-3 text-[#1e8e3e]" />}
                         </div>
                         <div className="flex items-center gap-2 text-xs">
-                          <Badge variant="outline">{p.role}</Badge>
-                          <span className="text-muted-foreground">{p.credit} cr</span>
-                          {xiIds.has(p.id) && <CheckCircle2 className="size-3.5 text-emerald-600" />}
+                          <Badge variant="outline" className="text-[10px] border-[#3c4043]">{p.role}</Badge>
+                          <span className="text-[#f9ab00] font-mono">{p.credits}cr</span>
+                          <span className="text-[#9aa0a6]">{p.selectedBy}%</span>
                         </div>
                       </button>
                     ))}
@@ -201,7 +175,9 @@ export function MatchesTab() {
                 </div>
               </div>
             </ScrollArea>
-          ) : <p className="text-center text-sm text-muted-foreground py-8">Select a match to view details</p>}
+          ) : (
+            <p className="text-center text-sm text-[#9aa0a6] py-8">Select a match to view details</p>
+          )}
         </CardContent>
       </Card>
       <PlayerProfileDialog player={profile} onClose={() => setProfile(null)} />
@@ -209,14 +185,14 @@ export function MatchesTab() {
   )
 }
 
-function TeamBox({ name, short, color, count }: { name: string; short: string; color: string; count: number }) {
+function TeamBox({ name, image, count }: { name: string; image: string; count: number }) {
   return (
-    <div className="rounded-lg border p-3" style={{ borderLeft: `4px solid ${color}` }}>
-      <p className="text-xs text-muted-foreground">{name}</p>
-      <div className="flex items-center justify-between mt-1">
-        <span className="font-bold text-lg">{short}</span>
-        <span className="text-xs text-muted-foreground">{count} players</span>
+    <div className="rounded-lg border border-[#3c4043] p-3 bg-[#28292c]">
+      <div className="flex items-center gap-2 mb-1">
+        {image && <img src={image} alt={name} className="size-8 rounded-full" />}
+        <span className="font-bold text-lg">{name}</span>
       </div>
+      <p className="text-xs text-[#9aa0a6]">{count} players</p>
     </div>
   )
 }
