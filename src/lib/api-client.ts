@@ -148,11 +148,6 @@ export const fantasyApi = {
   queueRetry: (id: string) => api.post(`/api/fantasy/queue/${id}`),
 }
 
-// Seed
-export const seedApi = {
-  seed: () => api.post('/api/seed'),
-}
-
 // Real teamgeneration.in data (proxied + decrypted)
 export const realApi = {
   matches: (sport?: string) => api.get<{ source: string; matches: any[]; total: number }>(`/api/real-matches?sport=${sport || 'cricket'}`),
