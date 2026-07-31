@@ -157,4 +157,5 @@ export const seedApi = {
 export const realApi = {
   matches: (sport?: string) => api.get<{ source: string; matches: any[]; total: number }>(`/api/real-matches?sport=${sport || 'cricket'}`),
   match: (id: string) => api.get<{ source: string; matchId: string; match: any }>(`/api/real-match/${id}`),
+  generate: (matchId: string, strategy: string, count: number) => api.post<{ teams: any[]; match: any; lineupStatus: string }>(`/api/real-generate/${matchId}`, { strategy, count }),
 }

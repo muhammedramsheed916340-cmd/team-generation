@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Users, Trophy, Send, Calendar, Activity, Zap, RefreshCw, Sparkles, Brain, Play, TrendingUp, Flame, Target } from 'lucide-react'
-import { healthApi, matchesApi } from '@/lib/api-client'
+import { healthApi, matchesApi, realApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 
 export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }) {
@@ -16,9 +16,43 @@ export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }
     setLoading(true)
     for (let i = 0; i <= retries; i++) {
       try {
-        const [m, matchesRes] = await Promise.all([healthApi.metrics(), matchesApi.list()])
+        // Fetch REAL matches from teamgeneration.in + metrics in parallel
+        const [m, realMatchesRes] = await Promise.all([
+          healthApi.metrics(),
+          realApi.matches('cricket').catch(() => ({ matches: [], total: 0 })),
+        ])
         setMetrics(m)
-        setMatches(matchesRes.matches)
+        // Use real matches if available, otherwise fall back to local matches
+        const realMatches = realMatchesRes.matches || []
+        if (realMatches.length > 0) {
+          // Transform real matches to match our card format
+          setMatches(realMatches.map((rm: any) => ({
+            id: rm.id,
+            shortName: `${rm.team1} vs ${rm.team2}`,
+            team1Short: rm.team1,
+            team2Short: rm.team2,
+            team1Name: rm.team1,
+            team2Name: rm.team2,
+            team1Color: '#563d7c',
+            team2Color: '#1a73e8',
+            team1Image: rm.team1Image,
+            team2Image: rm.team2Image,
+            series: rm.series,
+            format: 'T20',
+            venue: '',
+            city: '',
+            startAt: rm.matchTime,
+            status: rm.lineupOut ? 'TOSS_DONE' : 'UPCOMING',
+            playingXINamed: rm.lineupOut,
+            tossWinner: null,
+            tossDecision: null,
+            isReal: true,
+          })))
+        } else {
+          // Fall back to local matches
+          const localMatches = await matchesApi.list()
+          setMatches(localMatches.matches)
+        }
         setLoading(false)
         return
       } catch (e: any) {
@@ -100,32 +134,43 @@ function MatchCard({ match, onNavigate }: { match: any; onNavigate: (t: string) 
   const startDate = new Date(match.startAt)
   const isLive = match.status === 'LIVE'
   return (
-    <Card className="bg-[#202124] border-[#3c4043] overflow-hidden hover:border-[#563d7c] transition-colors cursor-pointer" onClick={() => onNavigate('matches')}>
+    <Card className="bg-[#202124] border-[#3c4043] overflow-hidden hover:border-[#563d7c] transition-colors cursor-pointer" onClick={() => onNavigate('live')}>
       <div className="p-4">
         <div className="flex items-center justify-between mb-3">
-          <Badge variant="outline" className="text-[10px] text-[#9aa0a6] border-[#3c4043]">{match.series}</Badge>
-          {isLive ? (
-            <Badge className="bg-[#d93025] text-white text-[10px] animate-pulse">● LIVE</Badge>
-          ) : match.playingXINamed ? (
-            <Badge className="bg-[#1e8e3e]/20 text-[#1e8e3e] text-[10px]">XI Announced</Badge>
-          ) : (
-            <Badge variant="outline" className="text-[10px] text-[#9aa0a6] border-[#3c4043]">{startDate.toLocaleDateString()}</Badge>
-          )}
+          <Badge variant="outline" className="text-[10px] text-[#9aa0a6] border-[#3c4043] truncate max-w-[150px]">{match.series}</Badge>
+          <div className="flex items-center gap-1">
+            {match.isReal && <Badge className="bg-[#d93025]/20 text-[#d93025] text-[10px]">LIVE</Badge>}
+            {isLive ? (
+              <Badge className="bg-[#d93025] text-white text-[10px] animate-pulse">● LIVE</Badge>
+            ) : match.playingXINamed ? (
+              <Badge className="bg-[#1e8e3e]/20 text-[#1e8e3e] text-[10px]">XI Out</Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] text-[#9aa0a6] border-[#3c4043]">{startDate.toLocaleDateString()}</Badge>
+            )}
+          </div>
         </div>
         {/* Teams */}
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2 flex-1">
-            <div className="size-10 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: match.team1Color }}>
-              {match.team1Short.slice(0, 2)}
-            </div>
+            {match.team1Image ? (
+              <img src={match.team1Image} alt={match.team1Short} className="size-10 rounded-full" />
+            ) : (
+              <div className="size-10 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: match.team1Color || '#563d7c' }}>
+                {match.team1Short?.slice(0, 2)}
+              </div>
+            )}
             <span className="font-semibold text-sm">{match.team1Short}</span>
           </div>
           <span className="text-[#9aa0a6] text-xs font-bold">VS</span>
           <div className="flex items-center gap-2 flex-1 justify-end">
             <span className="font-semibold text-sm">{match.team2Short}</span>
-            <div className="size-10 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: match.team2Color }}>
-              {match.team2Short.slice(0, 2)}
-            </div>
+            {match.team2Image ? (
+              <img src={match.team2Image} alt={match.team2Short} className="size-10 rounded-full" />
+            ) : (
+              <div className="size-10 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: match.team2Color || '#1a73e8' }}>
+                {match.team2Short?.slice(0, 2)}
+              </div>
+            )}
           </div>
         </div>
         {/* GL/SL/H2H buttons - like original */}
