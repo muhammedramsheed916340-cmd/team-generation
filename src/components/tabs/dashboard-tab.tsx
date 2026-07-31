@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Users, Trophy, Send, Calendar, Activity, Zap, RefreshCw, Sparkles, Brain, Play, TrendingUp, Flame, Target } from 'lucide-react'
-import { healthApi, matchesApi, realApi } from '@/lib/api-client'
+import { healthApi, realApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 
 export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }) {
@@ -18,48 +18,41 @@ export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }
       try {
         // Fetch REAL matches from teamgeneration.in + metrics in parallel
         const [m, realMatchesRes] = await Promise.all([
-          healthApi.metrics(),
-          realApi.matches('cricket').catch(() => ({ matches: [], total: 0 })),
+          healthApi.metrics().catch(() => ({})),
+          realApi.matches('cricket'),
         ])
         setMetrics(m)
-        // Use real matches if available, otherwise fall back to local matches
         const realMatches = realMatchesRes.matches || []
-        if (realMatches.length > 0) {
-          // Transform real matches to match our card format
-          setMatches(realMatches.map((rm: any) => ({
-            id: rm.id,
-            shortName: `${rm.team1} vs ${rm.team2}`,
-            team1Short: rm.team1,
-            team2Short: rm.team2,
-            team1Name: rm.team1,
-            team2Name: rm.team2,
-            team1Color: '#563d7c',
-            team2Color: '#1a73e8',
-            team1Image: rm.team1Image,
-            team2Image: rm.team2Image,
-            series: rm.series,
-            format: 'T20',
-            venue: '',
-            city: '',
-            startAt: rm.matchTime,
-            status: rm.lineupOut ? 'TOSS_DONE' : 'UPCOMING',
-            playingXINamed: rm.lineupOut,
-            tossWinner: null,
-            tossDecision: null,
-            isReal: true,
-          })))
-        } else {
-          // Fall back to local matches
-          const localMatches = await matchesApi.list()
-          setMatches(localMatches.matches)
-        }
+        // Transform real matches to match our card format
+        setMatches(realMatches.map((rm: any) => ({
+          id: rm.id,
+          shortName: `${rm.team1} vs ${rm.team2}`,
+          team1Short: rm.team1,
+          team2Short: rm.team2,
+          team1Name: rm.team1,
+          team2Name: rm.team2,
+          team1Color: '#563d7c',
+          team2Color: '#1a73e8',
+          team1Image: rm.team1Image,
+          team2Image: rm.team2Image,
+          series: rm.series,
+          format: 'T20',
+          venue: '',
+          city: '',
+          startAt: rm.matchTime,
+          status: rm.lineupOut ? 'TOSS_DONE' : 'UPCOMING',
+          playingXINamed: rm.lineupOut,
+          tossWinner: null,
+          tossDecision: null,
+          isReal: true,
+        })))
         setLoading(false)
         return
       } catch (e: any) {
         if (i < retries) {
           await new Promise(r => setTimeout(r, 800 * (i + 1)))
         } else {
-          toast.error('Failed to load data: ' + e.message)
+          toast.error('Failed to load matches: ' + e.message)
           setLoading(false)
         }
       }

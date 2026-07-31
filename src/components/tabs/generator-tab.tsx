@@ -9,7 +9,7 @@ import { Slider } from '@/components/ui/slider'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
 import { Sparkles, Wand2, Loader2, Crown, Star, TrendingUp, Shield, Layers, RefreshCw, AlertCircle, Radio } from 'lucide-react'
-import { realApi, matchesApi } from '@/lib/api-client'
+import { realApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 
 const STRATEGIES = [
@@ -28,17 +28,12 @@ export function GeneratorTab() {
   const [matchInfo, setMatchInfo] = useState<any>(null)
 
   useEffect(() => {
-    // Fetch REAL matches from teamgeneration.in
+    // Fetch REAL matches from teamgeneration.in ONLY — no fallback to mock data
     realApi.matches('cricket').then((r) => {
-      const realMatches = r.matches || []
-      setMatches(realMatches)
-      if (realMatches[0]) setMatchId(realMatches[0].id)
+      setMatches(r.matches || [])
+      if (r.matches?.[0]) setMatchId(r.matches[0].id)
     }).catch((e) => {
-      // Fallback to local matches
-      matchesApi.list().then((r) => {
-        setMatches(r.matches)
-        if (r.matches[0]) setMatchId(r.matches[0].id)
-      }).catch(() => toast.error('Failed to load matches'))
+      toast.error('Failed to load real matches: ' + e.message)
     })
   }, [])
 
