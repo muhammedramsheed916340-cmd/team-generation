@@ -1,11 +1,10 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
-import { Users, Trophy, Send, Calendar, Activity, Zap, TrendingUp, RefreshCw, Sparkles, ArrowRight, Brain, Download } from 'lucide-react'
-import { healthApi, matchesApi, testApi, seedApi } from '@/lib/api-client'
+import { Users, Trophy, Send, Calendar, Activity, Zap, RefreshCw, Sparkles, Brain, Play, TrendingUp, Flame, Target } from 'lucide-react'
+import { healthApi, matchesApi, seedApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 
 export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }) {
@@ -31,186 +30,128 @@ export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }
   }
 
   const c = metrics?.counts || {}
-  const transferStats = metrics?.transferStats || {}
-  const queue = metrics?.queue || {}
-  const cache = metrics?.cache || {}
 
   return (
     <div className="space-y-4">
-      {/* Top stats */}
+      {/* Hero banner - like original Dream11 banner */}
+      <div className="rounded-xl overflow-hidden bg-gradient-to-r from-[#563d7c] via-[#7c5bb5] to-[#563d7c] p-6 text-white relative">
+        <div className="relative z-10">
+          <h1 className="text-2xl md:text-3xl font-bold mb-1">India's Best Dream11 Team Generator</h1>
+          <p className="text-white/80 text-sm">Create Grand League winning teams with AI · GL · SL · H2H strategies</p>
+          <div className="flex gap-2 mt-4 flex-wrap">
+            <Button size="sm" variant="secondary" onClick={() => onNavigate('generator')}><Sparkles className="size-3.5" /> Generate Teams</Button>
+            <Button size="sm" variant="secondary" onClick={() => onNavigate('transfer')}><Send className="size-3.5" /> Direct Transfer</Button>
+            <Button size="sm" variant="secondary" onClick={() => onNavigate('predictions')}><Brain className="size-3.5" /> Predictions</Button>
+          </div>
+        </div>
+        <div className="absolute right-4 top-4 opacity-20">
+          <Trophy className="size-24" />
+        </div>
+      </div>
+
+      {/* Stats - dark cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <StatCard icon={<Users className="size-4" />} label="Users" value={c.totalUsers ?? '—'} color="emerald" />
-        <StatCard icon={<Calendar className="size-4" />} label="Matches" value={c.totalMatches ?? '—'} color="blue" />
-        <StatCard icon={<Trophy className="size-4" />} label="Teams Generated" value={c.totalTeams ?? '—'} color="amber" />
-        <StatCard icon={<Send className="size-4" />} label="Transfers" value={c.totalTransfers ?? '—'} color="purple" />
+        <DarkStat icon={<Users className="size-4" />} label="Users" value={c.totalUsers ?? '—'} color="#1a73e8" />
+        <DarkStat icon={<Calendar className="size-4" />} label="Matches" value={c.totalMatches ?? '—'} color="#1e8e3e" />
+        <DarkStat icon={<Trophy className="size-4" />} label="Teams Generated" value={c.totalTeams ?? '—'} color="#f9ab00" />
+        <DarkStat icon={<Send className="size-4" />} label="Transfers" value={c.totalTransfers ?? '—'} color="#563d7c" />
+      </div>
+
+      {/* Upcoming Matches - like original match cards */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-lg font-bold flex items-center gap-2"><Flame className="size-5 text-[#d93025]" /> Upcoming Matches</h2>
+          <Button variant="ghost" size="sm" onClick={() => onNavigate('matches')} className="text-[#9aa0a6]">View All →</Button>
+        </div>
+        <div className="grid md:grid-cols-2 gap-3">
+          {loading ? (
+            [...Array(4)].map((_, i) => <div key={i} className="h-32 bg-[#202124] animate-pulse rounded-xl" />)
+          ) : matches.slice(0, 6).map((m) => (
+            <MatchCard key={m.id} match={m} onNavigate={onNavigate} />
+          ))}
+        </div>
       </div>
 
       {/* Quick actions */}
       <div className="grid md:grid-cols-4 gap-3">
-        <ActionCard
-          icon={<Brain className="size-5" />}
-          title="Match Predictions"
-          desc="AI win probability & key players"
-          color="emerald"
-          onClick={() => onNavigate('predictions')}
-        />
-        <ActionCard
-          icon={<Sparkles className="size-5" />}
-          title="Generate AI Teams"
-          desc="GL / SL / H2H with advanced logic"
-          color="amber"
-          onClick={() => onNavigate('generator')}
-        />
-        <ActionCard
-          icon={<Send className="size-5" />}
-          title="Fantasy Transfer"
-          desc="Bulk transfer up to 500 teams"
-          color="purple"
-          onClick={() => onNavigate('transfer')}
-        />
-        <ActionCard
-          icon={<RefreshCw className="size-5" />}
-          title="Sync Live Matches"
-          desc="Auto-update playing XI"
-          color="blue"
-          onClick={() => onNavigate('matches')}
-        />
+        <QuickAction icon={<Brain className="size-5" />} title="Predictions" desc="AI win probability" onClick={() => onNavigate('predictions')} />
+        <QuickAction icon={<Play className="size-5" />} title="Simulation" desc="Ball-by-ball sim" onClick={() => onNavigate('simulation')} />
+        <QuickAction icon={<Sparkles className="size-5" />} title="AI Generator" desc="GL/SL/H2H teams" onClick={() => onNavigate('generator')} />
+        <QuickAction icon={<Send className="size-5" />} title="Transfer" desc="Bulk to Dream11" onClick={() => onNavigate('transfer')} />
       </div>
 
-      <div className="grid md:grid-cols-2 gap-4">
-        {/* System health */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base flex items-center gap-2"><Activity className="size-4" /> System Health</CardTitle>
-            <Button variant="ghost" size="sm" onClick={load} disabled={loading}><RefreshCw className={`size-3.5 ${loading ? 'animate-spin' : ''}`} /></Button>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <Row label="Cache hit rate" value={`${(cache.hitRate ?? 0).toFixed(1)}%`} />
-            <Row label="Cache size" value={`${cache.size ?? 0} keys`} />
-            <Row label="Queue depth" value={`${(queue.QUEUED || 0) + (queue.RETRYING || 0)} pending`} />
-            <Row label="Running jobs" value={`${queue.RUNNING || 0}`} />
-            <Row label="Linked fantasy accounts" value={c.totalAccounts ?? 0} />
-            <Row label="Unresolved errors" value={<Badge variant={c.totalErrors ? 'destructive' : 'secondary'}>{c.totalErrors ?? 0}</Badge>} />
-          </CardContent>
-        </Card>
-
-        {/* Transfer stats */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2"><Send className="size-4" /> Transfer Statistics</CardTitle>
-            <CardDescription>Status of all fantasy transfers</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {Object.keys(transferStats).length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No transfers yet</p>
-            ) : (
-              Object.entries(transferStats).map(([status, count]) => (
-                <div key={status} className="flex items-center justify-between">
-                  <Badge variant={status === 'VERIFIED' || status === 'SUCCESS' ? 'default' : status === 'FAILED' ? 'destructive' : 'secondary'}>
-                    {status}
-                  </Badge>
-                  <span className="text-sm font-mono">{count as number}</span>
-                </div>
-              ))
-            )}
-            <Button variant="outline" size="sm" className="w-full mt-2" onClick={() => onNavigate('transfer')}>
-              Go to Transfer <ArrowRight className="size-3.5" />
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Upcoming matches */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-base flex items-center gap-2"><Calendar className="size-4" /> Recent Matches</CardTitle>
-          <Button variant="outline" size="sm" onClick={() => onNavigate('matches')}>View all</Button>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-2">{[...Array(3)].map((_, i) => <div key={i} className="h-12 bg-muted animate-pulse rounded" />)}</div>
-          ) : (
-            <div className="space-y-2">
-              {matches.slice(0, 5).map((m) => (
-                <div key={m.id} className="flex items-center justify-between p-2 rounded border">
-                  <div>
-                    <p className="text-sm font-medium">{m.shortName}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(m.startAt).toLocaleString()} · {m.venue}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {m.playingXINamed && <Badge variant="outline" className="text-emerald-600">XI Announced</Badge>}
-                    <Badge variant={m.status === 'LIVE' ? 'destructive' : m.status === 'COMPLETED' ? 'secondary' : 'default'}>
-                      {m.status}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Seed button (dev) */}
       <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={seed}><Zap className="size-3.5" /> Seed demo data</Button>
+        <Button variant="ghost" size="sm" onClick={seed} className="text-[#9aa0a6]"><Zap className="size-3.5" /> Seed demo data</Button>
       </div>
     </div>
   )
 }
 
-function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: React.ReactNode; color: string }) {
-  const colors: Record<string, string> = {
-    emerald: 'from-emerald-500/10 to-emerald-500/5 text-emerald-700 dark:text-emerald-400',
-    blue: 'from-blue-500/10 to-blue-500/5 text-blue-700 dark:text-blue-400',
-    amber: 'from-amber-500/10 to-amber-500/5 text-amber-700 dark:text-amber-400',
-    purple: 'from-purple-500/10 to-purple-500/5 text-purple-700 dark:text-purple-400',
-  }
-  const iconBg: Record<string, string> = {
-    emerald: 'bg-emerald-500',
-    blue: 'bg-blue-500',
-    amber: 'bg-amber-500',
-    purple: 'bg-purple-500',
-  }
+function MatchCard({ match, onNavigate }: { match: any; onNavigate: (t: string) => void }) {
+  const startDate = new Date(match.startAt)
+  const isLive = match.status === 'LIVE'
   return (
-    <Card className={`bg-gradient-to-br ${colors[color]} border-0 shadow-sm`}>
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground font-medium">{label}</p>
-          <div className={`size-8 rounded-lg text-white flex items-center justify-center shadow-sm ${iconBg[color]}`}>{icon}</div>
+    <Card className="bg-[#202124] border-[#3c4043] overflow-hidden hover:border-[#563d7c] transition-colors cursor-pointer" onClick={() => onNavigate('matches')}>
+      <div className="p-4">
+        <div className="flex items-center justify-between mb-3">
+          <Badge variant="outline" className="text-[10px] text-[#9aa0a6] border-[#3c4043]">{match.series}</Badge>
+          {isLive ? (
+            <Badge className="bg-[#d93025] text-white text-[10px] animate-pulse">● LIVE</Badge>
+          ) : match.playingXINamed ? (
+            <Badge className="bg-[#1e8e3e]/20 text-[#1e8e3e] text-[10px]">XI Announced</Badge>
+          ) : (
+            <Badge variant="outline" className="text-[10px] text-[#9aa0a6] border-[#3c4043]">{startDate.toLocaleDateString()}</Badge>
+          )}
         </div>
-        <p className="text-3xl font-bold mt-2 tabular-nums">{value}</p>
-      </CardContent>
+        {/* Teams */}
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 flex-1">
+            <div className="size-10 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: match.team1Color }}>
+              {match.team1Short.slice(0, 2)}
+            </div>
+            <span className="font-semibold text-sm">{match.team1Short}</span>
+          </div>
+          <span className="text-[#9aa0a6] text-xs font-bold">VS</span>
+          <div className="flex items-center gap-2 flex-1 justify-end">
+            <span className="font-semibold text-sm">{match.team2Short}</span>
+            <div className="size-10 rounded-full flex items-center justify-center text-white font-bold text-sm" style={{ backgroundColor: match.team2Color }}>
+              {match.team2Short.slice(0, 2)}
+            </div>
+          </div>
+        </div>
+        {/* GL/SL/H2H buttons - like original */}
+        <div className="flex gap-1.5">
+          <Button size="sm" className="flex-1 bg-[#563d7c] hover:bg-[#6b4ba3] text-white text-xs h-7" onClick={(e) => { e.stopPropagation(); onNavigate('generator') }}>Mega</Button>
+          <Button size="sm" variant="outline" className="flex-1 border-[#3c4043] text-[#e8eaed] hover:bg-[#28292c] text-xs h-7" onClick={(e) => { e.stopPropagation(); onNavigate('generator') }}>GL</Button>
+          <Button size="sm" variant="outline" className="flex-1 border-[#3c4043] text-[#e8eaed] hover:bg-[#28292c] text-xs h-7" onClick={(e) => { e.stopPropagation(); onNavigate('generator') }}>SL</Button>
+          <Button size="sm" variant="outline" className="flex-1 border-[#3c4043] text-[#e8eaed] hover:bg-[#28292c] text-xs h-7" onClick={(e) => { e.stopPropagation(); onNavigate('generator') }}>H2H</Button>
+        </div>
+        {match.tossWinner && (
+          <p className="text-[10px] text-[#f9ab00] mt-2 text-center">Toss: {match.tossWinner} chose to {match.tossDecision}</p>
+        )}
+      </div>
     </Card>
   )
 }
 
-function ActionCard({ icon, title, desc, color, onClick }: { icon: React.ReactNode; title: string; desc: string; color: string; onClick: () => void }) {
-  const colors: Record<string, string> = {
-    emerald: 'hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/20',
-    blue: 'hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20',
-    purple: 'hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950/20',
-    amber: 'hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20',
-  }
-  const iconColors: Record<string, string> = {
-    emerald: 'bg-emerald-600',
-    blue: 'bg-blue-600',
-    purple: 'bg-purple-600',
-    amber: 'bg-amber-600',
-  }
+function DarkStat({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: React.ReactNode; color: string }) {
   return (
-    <button onClick={onClick} className={`text-left p-4 rounded-lg border bg-card transition-colors ${colors[color]}`}>
-      <div className={`size-10 rounded-lg text-white flex items-center justify-center mb-3 ${iconColors[color]}`}>{icon}</div>
-      <p className="font-semibold">{title}</p>
-      <p className="text-sm text-muted-foreground mt-0.5">{desc}</p>
-    </button>
+    <Card className="bg-[#202124] border-[#3c4043] p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-[#9aa0a6]">{label}</p>
+        <div className="size-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${color}20`, color }}>{icon}</div>
+      </div>
+      <p className="text-2xl font-bold mt-2 tabular-nums text-white">{value}</p>
+    </Card>
   )
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
+function QuickAction({ icon, title, desc, onClick }: { icon: React.ReactNode; title: string; desc: string; onClick: () => void }) {
   return (
-    <div className="flex items-center justify-between text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
-    </div>
+    <button onClick={onClick} className="text-left p-4 rounded-xl bg-[#202124] border border-[#3c4043] hover:border-[#563d7c] transition-colors">
+      <div className="size-10 rounded-lg bg-[#563d7c] text-white flex items-center justify-center mb-3">{icon}</div>
+      <p className="font-semibold text-white">{title}</p>
+      <p className="text-sm text-[#9aa0a6] mt-0.5">{desc}</p>
+    </button>
   )
 }

@@ -1,0 +1,19 @@
+:root {
+  --tg-bg: #131314;
+  --tg-bg-card: #202124;
+  --tg-bg-elevated: #28292c;
+  --tg-border: #3c4043;
+  --tg-text: #e8eaed;
+  --tg-text-muted: #9aa0a6;
+  --tg-primary: #563d7c;
+  --tg-primary-hover: #6b4ba3;
+  --tg-success: #1e8e3e;
+  --tg-danger: #d93025;
+  --tg-warning: #f9ab00;
+  --tg-blue: #1a73e8;
+}
+
+html, body {
+  background: var(--tg-bg);
+  color: var(--tg-text);
+}

@@ -5,7 +5,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { RefreshCw, Calendar, MapPin, Users, CheckCircle2, Dice5, Sparkles, Brain, Download } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { RefreshCw, Calendar, MapPin, Users, CheckCircle2, Dice5, Sparkles, Brain, Download, Search } from 'lucide-react'
 import { matchesApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 import { PlayerProfileDialog, PlayerProfile } from '@/components/app/player-profile-dialog'
@@ -18,6 +20,8 @@ export function MatchesTab() {
   const [players, setPlayers] = useState<any[]>([])
   const [xi, setXi] = useState<any[]>([])
   const [profile, setProfile] = useState<PlayerProfile | null>(null)
+  const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('ALL')
 
   const load = async () => {
     setLoading(true)
@@ -33,6 +37,7 @@ export function MatchesTab() {
 
   useEffect(() => {
     if (!selected) return
+    setSearch('')
     Promise.all([matchesApi.players(selected), matchesApi.playingXI(selected)])
       .then(([p, x]) => { setPlayers(p.players); setXi(x.playingXI) })
       .catch((e) => toast.error(e.message))
@@ -55,6 +60,11 @@ export function MatchesTab() {
 
   const sel = matches.find((m) => m.id === selected)
   const xiIds = new Set(xi.map((x) => x.playerId))
+  const filteredPlayers = players.filter((p) => {
+    const matchesSearch = !search || p.name.toLowerCase().includes(search.toLowerCase()) || p.shortName.toLowerCase().includes(search.toLowerCase())
+    const matchesRole = roleFilter === 'ALL' || p.role === roleFilter
+    return matchesSearch && matchesRole
+  })
 
   return (
     <div className="grid md:grid-cols-2 gap-4">
@@ -144,11 +154,28 @@ export function MatchesTab() {
                 )}
                 <div>
                   <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                    <Sparkles className="size-4" /> Squad ({players.length})
+                    <Sparkles className="size-4" /> Squad ({filteredPlayers.length})
                     {sel.playingXINamed && <Badge variant="outline" className="text-emerald-600">XI Named</Badge>}
                   </h4>
+                  {/* Search + filter */}
+                  <div className="flex gap-2 mb-2">
+                    <div className="relative flex-1">
+                      <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                      <Input placeholder="Search player..." value={search} onChange={(e) => setSearch(e.target.value)} className="h-8 pl-8 text-sm" />
+                    </div>
+                    <Select value={roleFilter} onValueChange={setRoleFilter}>
+                      <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ALL">All</SelectItem>
+                        <SelectItem value="WK">WK</SelectItem>
+                        <SelectItem value="BAT">BAT</SelectItem>
+                        <SelectItem value="AR">AR</SelectItem>
+                        <SelectItem value="BOWL">BOWL</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <div className="space-y-1">
-                    {players.map((p) => (
+                    {filteredPlayers.map((p) => (
                       <button
                         key={p.id}
                         onClick={() => setProfile({

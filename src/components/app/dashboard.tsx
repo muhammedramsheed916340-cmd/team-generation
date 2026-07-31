@@ -4,7 +4,7 @@ import { useAuth } from './auth-provider'
 import { useJobsSocket } from '@/hooks/use-jobs-socket'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Trophy, LogOut, Wifi, WifiOff, LayoutDashboard, Calendar, Sparkles, Send, Crown, ScrollText, Activity, FlaskConical, Zap, Brain } from 'lucide-react'
+import { Trophy, LogOut, Wifi, WifiOff, LayoutDashboard, Calendar, Sparkles, Send, Crown, ScrollText, Activity, FlaskConical, Zap, Brain, Play, Menu, X } from 'lucide-react'
 import { DashboardTab } from '@/components/tabs/dashboard-tab'
 import { MatchesTab } from '@/components/tabs/matches-tab'
 import { GeneratorTab } from '@/components/tabs/generator-tab'
@@ -15,86 +15,127 @@ import { AuditTab } from '@/components/tabs/audit-tab'
 import { MonitoringTab } from '@/components/tabs/monitoring-tab'
 import { TestsTab } from '@/components/tabs/tests-tab'
 import { PredictionsTab } from '@/components/tabs/predictions-tab'
+import { SimulationTab } from '@/components/tabs/simulation-tab'
+import { AnimatedTabContent } from '@/components/app/animations'
 
 export function Dashboard() {
   const { user, logout } = useAuth()
   const { connected } = useJobsSocket()
   const [tab, setTab] = useState('dashboard')
+  const [mobileMenu, setMobileMenu] = useState(false)
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN'
 
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-b from-emerald-50/30 via-background to-background dark:from-emerald-950/10 dark:via-background dark:to-background">
-      {/* Header - gradient accent */}
-      <header className="sticky top-0 z-50 border-b bg-gradient-to-r from-background via-background to-emerald-50/50 dark:to-emerald-950/20 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+    <div className="min-h-screen flex flex-col bg-[#131314] text-[#e8eaed]">
+      {/* Top Info Bar - like original site nav links */}
+      <div className="bg-[#0a0a0b] border-b border-[#3c4043] text-xs">
+        <div className="container mx-auto px-4 flex items-center justify-between h-8">
+          <div className="flex items-center gap-3 overflow-x-auto scrollbar-hide">
+            <span className="text-[#9aa0a6] hover:text-white cursor-pointer whitespace-nowrap">How to generate?</span>
+            <span className="text-[#3c4043]">|</span>
+            <span className="text-[#9aa0a6] hover:text-white cursor-pointer whitespace-nowrap">Best tips</span>
+            <span className="text-[#3c4043]">|</span>
+            <span className="text-[#9aa0a6] hover:text-white cursor-pointer whitespace-nowrap">Privacy Policy</span>
+            <span className="text-[#3c4043]">|</span>
+            <span className="text-[#9aa0a6] hover:text-white cursor-pointer whitespace-nowrap">Terms</span>
+            <span className="text-[#3c4043]">|</span>
+            <span className="text-[#9aa0a6] hover:text-white cursor-pointer whitespace-nowrap">Disclaimer</span>
+            <span className="text-[#3c4043]">|</span>
+            <span className="text-[#9aa0a6] hover:text-white cursor-pointer whitespace-nowrap">Contact us</span>
+          </div>
+          <div className="hidden md:flex items-center gap-2">
+            <a href="#" className="text-[#d93025] hover:underline">YouTube</a>
+            <span className="text-[#3c4043]">|</span>
+            <span className="text-[#9aa0a6]">About us</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Header - dark with logo */}
+      <header className="sticky top-0 z-50 bg-[#202124] border-b border-[#3c4043] shadow-lg">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-2.5">
-            <div className="size-9 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white flex items-center justify-center shadow-md shadow-emerald-500/30">
-              <Trophy className="size-5" />
-            </div>
-            <div className="hidden sm:block">
-              <span className="font-bold text-lg leading-tight block">TeamGen Pro</span>
-              <span className="text-[10px] text-muted-foreground leading-tight block">AI Fantasy Cricket</span>
+          <div className="flex items-center gap-3">
+            <button className="md:hidden" onClick={() => setMobileMenu(!mobileMenu)}>
+              {mobileMenu ? <X className="size-5" /> : <Menu className="size-5" />}
+            </button>
+            <div className="flex items-center gap-2.5">
+              <div className="size-9 rounded-lg bg-gradient-to-br from-[#563d7c] to-[#7c5bb5] flex items-center justify-center font-bold text-white text-lg shadow-md">
+                TG
+              </div>
+              <div className="hidden sm:block">
+                <span className="font-bold text-lg leading-tight block text-white">Team Generation</span>
+                <span className="text-[10px] text-[#9aa0a6] leading-tight block">Dream11 Team Generator</span>
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${connected ? 'border-emerald-200 bg-emerald-50 dark:bg-emerald-950/30 dark:border-emerald-900' : ''}`}>
-              <span className={`size-2 rounded-full ${connected ? 'bg-emerald-500 animate-pulse' : 'bg-muted-foreground'}`} />
-              {connected ? <Wifi className="size-3 text-emerald-600" /> : <WifiOff className="size-3 text-muted-foreground" />}
-              <span className={connected ? 'text-emerald-600 font-medium' : 'text-muted-foreground'}>
-                {connected ? 'Live' : 'Offline'}
-              </span>
+            <div className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border ${connected ? 'border-[#1e8e3e]/40 bg-[#1e8e3e]/10' : 'border-[#3c4043]'}`}>
+              <span className={`size-2 rounded-full ${connected ? 'bg-[#1e8e3e] animate-pulse' : 'bg-[#9aa0a6]'}`} />
+              {connected ? <Wifi className="size-3 text-[#1e8e3e]" /> : <WifiOff className="size-3 text-[#9aa0a6]" />}
+              <span className={connected ? 'text-[#1e8e3e] font-medium' : 'text-[#9aa0a6]'}>{connected ? 'Live' : 'Offline'}</span>
             </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border bg-gradient-to-r from-amber-50 to-yellow-50 dark:from-amber-950/30 dark:to-yellow-950/20 border-amber-200 dark:border-amber-900">
-              <Zap className="size-3 text-amber-600" />
-              <span className="font-semibold text-amber-700 dark:text-amber-400">{user?.credits ?? 0}</span>
-              <span className="text-amber-600/70 text-[10px]">credits</span>
+            <div className="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border bg-[#f9ab00]/10 border-[#f9ab00]/30">
+              <Zap className="size-3 text-[#f9ab00]" />
+              <span className="font-semibold text-[#f9ab00]">{user?.credits ?? 0}</span>
+              <span className="text-[#f9ab00]/70 text-[10px]">cr</span>
             </div>
             <div className="text-xs text-right hidden md:block">
-              <p className="font-medium leading-tight">{user?.name}</p>
-              <p className="text-muted-foreground leading-tight">{user?.email}</p>
+              <p className="font-medium leading-tight text-white">{user?.name}</p>
+              <p className="text-[#9aa0a6] leading-tight">{user?.email}</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30">
+            <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="hover:bg-[#d93025]/20 hover:text-[#d93025] text-[#9aa0a6]">
               <LogOut className="size-4" />
             </Button>
           </div>
         </div>
       </header>
 
-      {/* Main */}
-      <main className="flex-1 container mx-auto px-4 py-4 w-full">
-        <Tabs value={tab} onValueChange={setTab} className="w-full">
-          <div className="overflow-x-auto pb-1">
-            <TabsList className="inline-flex w-max h-auto">
-              <TabsTrigger value="dashboard" className="gap-1.5"><LayoutDashboard className="size-4" /> Dashboard</TabsTrigger>
-              <TabsTrigger value="matches" className="gap-1.5"><Calendar className="size-4" /> Matches</TabsTrigger>
-              <TabsTrigger value="predictions" className="gap-1.5"><Brain className="size-4" /> Predictions</TabsTrigger>
-              <TabsTrigger value="generator" className="gap-1.5"><Sparkles className="size-4" /> AI Generator</TabsTrigger>
-              <TabsTrigger value="transfer" className="gap-1.5"><Send className="size-4" /> Fantasy Transfer</TabsTrigger>
-              <TabsTrigger value="subscriptions" className="gap-1.5"><Crown className="size-4" /> Plans</TabsTrigger>
-              {isAdmin && <TabsTrigger value="admin" className="gap-1.5"><Shield className="size-4" /> Admin</TabsTrigger>}
-              <TabsTrigger value="monitoring" className="gap-1.5"><Activity className="size-4" /> Monitoring</TabsTrigger>
-              <TabsTrigger value="audit" className="gap-1.5"><ScrollText className="size-4" /> Audit</TabsTrigger>
-              <TabsTrigger value="tests" className="gap-1.5"><FlaskConical className="size-4" /> Tests</TabsTrigger>
-            </TabsList>
-          </div>
-          <TabsContent value="dashboard" className="mt-4"><DashboardTab onNavigate={setTab} /></TabsContent>
-          <TabsContent value="matches" className="mt-4"><MatchesTab /></TabsContent>
-          <TabsContent value="predictions" className="mt-4"><PredictionsTab /></TabsContent>
-          <TabsContent value="generator" className="mt-4"><GeneratorTab /></TabsContent>
-          <TabsContent value="transfer" className="mt-4"><TransferTab /></TabsContent>
-          <TabsContent value="subscriptions" className="mt-4"><SubscriptionsTab /></TabsContent>
-          {isAdmin && <TabsContent value="admin" className="mt-4"><AdminTab /></TabsContent>}
-          <TabsContent value="monitoring" className="mt-4"><MonitoringTab /></TabsContent>
-          <TabsContent value="audit" className="mt-4"><AuditTab /></TabsContent>
-          <TabsContent value="tests" className="mt-4"><TestsTab /></TabsContent>
-        </Tabs>
-      </main>
+      {/* Sports Tabs Bar - like original Cricket/Football/Basketball/Kabaddi */}
+      <div className="bg-[#1a1a1c] border-b border-[#3c4043]">
+        <div className="container mx-auto px-4">
+          <Tabs value={tab} onValueChange={setTab} className="w-full">
+            <div className="overflow-x-auto pb-0">
+              <TabsList className="inline-flex w-max h-auto bg-transparent gap-0 p-0">
+                <TabsTrigger value="dashboard" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><LayoutDashboard className="size-4" /> Dashboard</TabsTrigger>
+                <TabsTrigger value="matches" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Calendar className="size-4" /> Matches</TabsTrigger>
+                <TabsTrigger value="predictions" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Brain className="size-4" /> Predictions</TabsTrigger>
+                <TabsTrigger value="simulation" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Play className="size-4" /> Simulation</TabsTrigger>
+                <TabsTrigger value="generator" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Sparkles className="size-4" /> AI Generator</TabsTrigger>
+                <TabsTrigger value="transfer" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Send className="size-4" /> Transfer</TabsTrigger>
+                <TabsTrigger value="subscriptions" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Crown className="size-4" /> Plans</TabsTrigger>
+                {isAdmin && <TabsTrigger value="admin" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Shield className="size-4" /> Admin</TabsTrigger>}
+                <TabsTrigger value="monitoring" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Activity className="size-4" /> Monitor</TabsTrigger>
+                <TabsTrigger value="audit" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><ScrollText className="size-4" /> Audit</TabsTrigger>
+                <TabsTrigger value="tests" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><FlaskConical className="size-4" /> Tests</TabsTrigger>
+              </TabsList>
+            </div>
 
-      {/* Footer - sticky to bottom */}
-      <footer className="border-t mt-auto py-3 bg-gradient-to-r from-emerald-50/50 to-background dark:from-emerald-950/20 dark:to-background">
-        <div className="container mx-auto px-4 flex items-center justify-between text-xs text-muted-foreground">
-          <span>TeamGen Pro · AI Fantasy Cricket Platform</span>
-          <span className="hidden sm:inline">{new Date().getFullYear()} · Next.js + Prisma + Socket.io</span>
+            <div className="py-4">
+              <TabsContent value="dashboard" className="mt-0"><AnimatedTabContent tabKey="dashboard"><DashboardTab onNavigate={setTab} /></AnimatedTabContent></TabsContent>
+              <TabsContent value="matches" className="mt-0"><AnimatedTabContent tabKey="matches"><MatchesTab /></AnimatedTabContent></TabsContent>
+              <TabsContent value="predictions" className="mt-0"><AnimatedTabContent tabKey="predictions"><PredictionsTab /></AnimatedTabContent></TabsContent>
+              <TabsContent value="simulation" className="mt-0"><AnimatedTabContent tabKey="simulation"><SimulationTab /></AnimatedTabContent></TabsContent>
+              <TabsContent value="generator" className="mt-0"><AnimatedTabContent tabKey="generator"><GeneratorTab /></AnimatedTabContent></TabsContent>
+              <TabsContent value="transfer" className="mt-0"><AnimatedTabContent tabKey="transfer"><TransferTab /></AnimatedTabContent></TabsContent>
+              <TabsContent value="subscriptions" className="mt-0"><AnimatedTabContent tabKey="subscriptions"><SubscriptionsTab /></AnimatedTabContent></TabsContent>
+              {isAdmin && <TabsContent value="admin" className="mt-0"><AnimatedTabContent tabKey="admin"><AdminTab /></AnimatedTabContent></TabsContent>}
+              <TabsContent value="monitoring" className="mt-0"><AnimatedTabContent tabKey="monitoring"><MonitoringTab /></AnimatedTabContent></TabsContent>
+              <TabsContent value="audit" className="mt-0"><AnimatedTabContent tabKey="audit"><AuditTab /></AnimatedTabContent></TabsContent>
+              <TabsContent value="tests" className="mt-0"><AnimatedTabContent tabKey="tests"><TestsTab /></AnimatedTabContent></TabsContent>
+            </div>
+          </Tabs>
+        </div>
+      </div>
+
+      {/* Footer - like original "developed by Believer01 CEO Bobby" */}
+      <footer className="mt-auto bg-[#0a0a0b] border-t border-[#3c4043] py-4">
+        <div className="container mx-auto px-4 text-center">
+          <p className="text-xs text-[#9aa0a6]">
+            Developed by <span className="text-[#563d7c] font-semibold">Believer01</span> · CEO Bobby
+          </p>
+          <p className="text-[10px] text-[#5f6368] mt-1">
+            All Rights Reserved ©2021 · Team Generation · Dream11 Team Generator Software
+          </p>
         </div>
       </footer>
     </div>
