@@ -47,12 +47,12 @@ function randomName(): string {
 }
 
 function roleCredit(role: string): number {
-  // fantasy credit ranges by role
+  // fantasy credit ranges by role (tuned so avg 11-player team ~92-98 credits, under 100 limit)
   switch (role) {
-    case 'WK': return 8 + Math.random() * 3.5 // 8-11.5
-    case 'BAT': return 7.5 + Math.random() * 4 // 7.5-11.5
-    case 'AR': return 8 + Math.random() * 3 // 8-11
-    case 'BOWL': return 7 + Math.random() * 4 // 7-11
+    case 'WK': return 7 + Math.random() * 3.5 // 7-10.5
+    case 'BAT': return 7 + Math.random() * 3.5 // 7-10.5
+    case 'AR': return 7.5 + Math.random() * 3 // 7.5-10.5
+    case 'BOWL': return 6.5 + Math.random() * 3.5 // 6.5-10
     default: return 8
   }
 }

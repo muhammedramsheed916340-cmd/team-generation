@@ -198,7 +198,8 @@ export function generateTeam(
     // pick players per role with weighting
     const picks: PlayerLite[] = []
     let ok = true
-    for (const [role, count] of Object.entries(combo) as [string, number][]) {
+    for (const [roleKey, count] of Object.entries(combo) as [string, number][]) {
+      const role = roleKey.toUpperCase() as 'WK' | 'BAT' | 'AR' | 'BOWL'
       const rolePool = byRole[role]
       if (!rolePool || rolePool.length < count) {
         ok = false
@@ -207,9 +208,13 @@ export function generateTeam(
       const weights = rolePool.map((p) => {
         let w = playerWeight(p, strategy)
         w *= applyTossBias(p, match.tossWinner || '', match.tossDecision || '', match.team1Short, match.team2Short)
+        // credit awareness: penalize expensive players to stay under budget
+        const budgetPerPlayer = MAX_CREDIT / 11 // ~9.09
+        if (p.credit > budgetPerPlayer) {
+          w *= Math.max(0.1, 1 - (p.credit - budgetPerPlayer) / 5)
+        }
         return w
       })
-      // weighted sampling without replacement
       const chosen: PlayerLite[] = []
       const poolCopy = [...rolePool]
       const wCopy = [...weights]
@@ -231,11 +236,10 @@ export function generateTeam(
     const totalCredit = Math.round(picks.reduce((a, p) => a + p.credit, 0) * 10) / 10
     if (totalCredit > MAX_CREDIT) continue
 
-    // check team split (max 10, practical 4-7)
+    // check team split (max 10 from one team; min 1 from other)
     const team1Count = picks.filter((p) => p.team === match.team1Short).length
     const team2Count = 11 - team1Count
     if (team1Count > 10 || team2Count > 10) continue
-    if (team1Count < 3 || team2Count < 3) continue
 
     const { captainId, viceCaptainId } = pickCaptainAndVC(picks, strategy)
     const wkCount = picks.filter((p) => p.role === 'WK').length
@@ -265,6 +269,65 @@ export function generateTeam(
       },
     }
   }
+
+  // FALLBACK: if no weighted combo worked, pick cheapest players per role
+  // with team-balanced selection to guarantee a valid team is always produced
+  for (const combo of ROLE_COMBOS) {
+    const picks: PlayerLite[] = []
+    let ok = true
+    for (const [roleKey, count] of Object.entries(combo) as [string, number][]) {
+      const role = roleKey.toUpperCase() as 'WK' | 'BAT' | 'AR' | 'BOWL'
+      const rolePool = byRole[role]
+      if (!rolePool || rolePool.length < count) { ok = false; break }
+      // split by team and pick cheapest from each team alternately
+      const team1Pool = rolePool.filter((p) => p.team === match.team1Short).sort((a, b) => a.credit - b.credit)
+      const team2Pool = rolePool.filter((p) => p.team === match.team2Short).sort((a, b) => a.credit - b.credit)
+      const chosen: PlayerLite[] = []
+      // aim for roughly 50/50 split, pick cheapest from each side
+      const fromTeam1 = Math.ceil(count / 2)
+      const fromTeam2 = count - fromTeam1
+      for (let i = 0; i < fromTeam1 && i < team1Pool.length; i++) chosen.push(team1Pool[i])
+      for (let i = 0; i < fromTeam2 && i < team2Pool.length; i++) chosen.push(team2Pool[i])
+      // if one team doesn't have enough, fill from the other
+      while (chosen.length < count) {
+        const all = rolePool.filter((p) => !chosen.includes(p)).sort((a, b) => a.credit - b.credit)
+        if (all.length === 0) break
+        chosen.push(all[0])
+      }
+      if (chosen.length !== count) { ok = false; break }
+      picks.push(...chosen)
+    }
+    if (!ok || picks.length !== 11) continue
+    const totalCredit = Math.round(picks.reduce((a, p) => a + p.credit, 0) * 10) / 10
+    const team1Count = picks.filter((p) => p.team === match.team1Short).length
+    const team2Count = 11 - team1Count
+    if (totalCredit > MAX_CREDIT) continue
+    if (team1Count > 10 || team2Count > 10) continue
+
+    const { captainId, viceCaptainId } = pickCaptainAndVC(picks, strategy)
+    const wkCount = picks.filter((p) => p.role === 'WK').length
+    const batCount = picks.filter((p) => p.role === 'BAT').length
+    const arCount = picks.filter((p) => p.role === 'AR').length
+    const bowlCount = picks.filter((p) => p.role === 'BOWL').length
+    return {
+      captainId,
+      viceCaptainId,
+      players: picks,
+      totalCredit,
+      team1Count,
+      team2Count,
+      wkCount,
+      batCount,
+      arCount,
+      bowlCount,
+      projectedScore: projectedScore(picks, captainId, viceCaptainId),
+      uniquenessScore: uniquenessScore(picks, strategy),
+      riskLevel: riskForCombo(combo, team1Count),
+      combinationKey: `${wkCount} WK, ${batCount} BAT, ${arCount} AR, ${bowlCount} BOWL`,
+      meta: { strategy, combo, seed, fallback: true },
+    }
+  }
+
   return null
 }
 
