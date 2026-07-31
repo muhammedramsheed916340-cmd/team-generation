@@ -4,7 +4,7 @@
  * The app is directly accessible without credentials.
  */
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { api } from '@/lib/api-client'
+import { api, setToken } from '@/lib/api-client'
 
 interface AuthUser {
   id: string
@@ -31,8 +31,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const init = async () => {
       try {
         // Auto-login: get or create a default session user (no credentials needed)
-        const u: any = await api.post('/api/auth/auto-login', {})
-        if (!cancelled) setUser(u.user)
+        const res: any = await api.post('/api/auth/auto-login', {})
+        if (!cancelled) {
+          // Store the token so all subsequent API calls are authenticated
+          setToken(res.accessToken, res.refreshToken, res.user)
+          setUser(res.user)
+        }
       } catch {
         if (!cancelled) setUser(null)
       } finally {

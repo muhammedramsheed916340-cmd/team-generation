@@ -5,10 +5,13 @@ import { Loader2 } from 'lucide-react'
 
 function App() {
   const { user, loading } = useAuth()
-  if (loading) {
+  if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#131314]">
-        <Loader2 className="size-8 animate-spin text-[#563d7c]" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="size-8 animate-spin text-[#563d7c]" />
+          <p className="text-[#9aa0a6] text-sm">Loading Team Generation...</p>
+        </div>
       </div>
     )
   }
