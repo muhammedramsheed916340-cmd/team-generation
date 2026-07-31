@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Users, Trophy, Send, Calendar, Activity, Zap, TrendingUp, RefreshCw, Sparkles, ArrowRight } from 'lucide-react'
+import { Users, Trophy, Send, Calendar, Activity, Zap, TrendingUp, RefreshCw, Sparkles, ArrowRight, Brain, Download } from 'lucide-react'
 import { healthApi, matchesApi, testApi, seedApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 
@@ -46,25 +46,32 @@ export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }
       </div>
 
       {/* Quick actions */}
-      <div className="grid md:grid-cols-3 gap-3">
+      <div className="grid md:grid-cols-4 gap-3">
+        <ActionCard
+          icon={<Brain className="size-5" />}
+          title="Match Predictions"
+          desc="AI win probability & key players"
+          color="emerald"
+          onClick={() => onNavigate('predictions')}
+        />
         <ActionCard
           icon={<Sparkles className="size-5" />}
           title="Generate AI Teams"
-          desc="Create GL / SL / H2H teams with advanced AI logic"
-          color="emerald"
+          desc="GL / SL / H2H with advanced logic"
+          color="amber"
           onClick={() => onNavigate('generator')}
         />
         <ActionCard
           icon={<Send className="size-5" />}
           title="Fantasy Transfer"
-          desc="Bulk transfer up to 500 teams to Dream11 / My11Circle"
+          desc="Bulk transfer up to 500 teams"
           color="purple"
           onClick={() => onNavigate('transfer')}
         />
         <ActionCard
           icon={<RefreshCw className="size-5" />}
           title="Sync Live Matches"
-          desc="Fetch latest matches and auto-update playing XI"
+          desc="Auto-update playing XI"
           color="blue"
           onClick={() => onNavigate('matches')}
         />
@@ -153,19 +160,25 @@ export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }
 
 function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: React.ReactNode; color: string }) {
   const colors: Record<string, string> = {
-    emerald: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400',
-    blue: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400',
-    amber: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-400',
-    purple: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-400',
+    emerald: 'from-emerald-500/10 to-emerald-500/5 text-emerald-700 dark:text-emerald-400',
+    blue: 'from-blue-500/10 to-blue-500/5 text-blue-700 dark:text-blue-400',
+    amber: 'from-amber-500/10 to-amber-500/5 text-amber-700 dark:text-amber-400',
+    purple: 'from-purple-500/10 to-purple-500/5 text-purple-700 dark:text-purple-400',
+  }
+  const iconBg: Record<string, string> = {
+    emerald: 'bg-emerald-500',
+    blue: 'bg-blue-500',
+    amber: 'bg-amber-500',
+    purple: 'bg-purple-500',
   }
   return (
-    <Card>
+    <Card className={`bg-gradient-to-br ${colors[color]} border-0 shadow-sm`}>
       <CardContent className="p-4">
         <div className="flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <div className={`size-7 rounded-md flex items-center justify-center ${colors[color]}`}>{icon}</div>
+          <p className="text-xs text-muted-foreground font-medium">{label}</p>
+          <div className={`size-8 rounded-lg text-white flex items-center justify-center shadow-sm ${iconBg[color]}`}>{icon}</div>
         </div>
-        <p className="text-2xl font-bold mt-2">{value}</p>
+        <p className="text-3xl font-bold mt-2 tabular-nums">{value}</p>
       </CardContent>
     </Card>
   )
@@ -176,11 +189,13 @@ function ActionCard({ icon, title, desc, color, onClick }: { icon: React.ReactNo
     emerald: 'hover:border-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-950/20',
     blue: 'hover:border-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950/20',
     purple: 'hover:border-purple-500 hover:bg-purple-50 dark:hover:bg-purple-950/20',
+    amber: 'hover:border-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20',
   }
   const iconColors: Record<string, string> = {
     emerald: 'bg-emerald-600',
     blue: 'bg-blue-600',
     purple: 'bg-purple-600',
+    amber: 'bg-amber-600',
   }
   return (
     <button onClick={onClick} className={`text-left p-4 rounded-lg border bg-card transition-colors ${colors[color]}`}>

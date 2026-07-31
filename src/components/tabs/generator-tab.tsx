@@ -9,7 +9,7 @@ import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { Sparkles, Wand2, Loader2, Crown, Star, TrendingUp, Shield, Layers, RefreshCw } from 'lucide-react'
+import { Sparkles, Wand2, Loader2, Crown, Star, TrendingUp, Shield, Layers, RefreshCw, Download } from 'lucide-react'
 import { matchesApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 
@@ -127,8 +127,13 @@ export function GeneratorTab() {
 
       {/* Results */}
       <Card className="flex flex-col max-h-[calc(100vh-12rem)]">
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
           <CardTitle className="text-base flex items-center gap-2"><Layers className="size-4" /> Generated Teams ({teams.length})</CardTitle>
+          {teams.length > 0 && matchId && (
+            <Button size="sm" variant="outline" onClick={() => window.open(`/api/matches/${matchId}/export-teams?strategy=${strategy}`, '_blank')}>
+              <Download className="size-3.5" /> Export CSV
+            </Button>
+          )}
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
           <ScrollArea className="h-[calc(100vh-16rem)]">

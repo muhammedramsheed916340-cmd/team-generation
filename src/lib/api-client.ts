@@ -82,6 +82,7 @@ export const matchesApi = {
   generate: (id: string, strategy: string, count: number, regenerateOnToss?: boolean) =>
     api.post<{ teams: any[] }>(`/api/matches/${id}/generate`, { strategy, count, regenerateOnToss }),
   getTeams: (id: string, strategy?: string) => api.get<{ teams: any[] }>(`/api/matches/${id}/generate${strategy ? `?strategy=${strategy}` : ''}`),
+  predict: (id: string) => api.get<any>(`/api/matches/${id}/predict`),
   sync: () => api.post('/api/sync/matches'),
 }
 

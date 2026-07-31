@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { RefreshCw, Calendar, MapPin, Users, CheckCircle2, Dice5, Sparkles } from 'lucide-react'
+import { RefreshCw, Calendar, MapPin, Users, CheckCircle2, Dice5, Sparkles, Brain, Download } from 'lucide-react'
 import { matchesApi } from '@/lib/api-client'
 import { toast } from 'sonner'
+import { PlayerProfileDialog, PlayerProfile } from '@/components/app/player-profile-dialog'
 
 export function MatchesTab() {
   const [matches, setMatches] = useState<any[]>([])
@@ -16,6 +17,7 @@ export function MatchesTab() {
   const [selected, setSelected] = useState<string | null>(null)
   const [players, setPlayers] = useState<any[]>([])
   const [xi, setXi] = useState<any[]>([])
+  const [profile, setProfile] = useState<PlayerProfile | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -108,12 +110,15 @@ export function MatchesTab() {
           <div className="flex items-center justify-between">
             <CardTitle className="text-base">{sel?.shortName || 'Select a match'}</CardTitle>
             {sel && (
-              <div className="flex gap-1">
+              <div className="flex gap-1 flex-wrap">
                 <Button size="sm" variant="outline" onClick={() => announceXI(sel.id)} disabled={sel.playingXINamed}>
                   <Users className="size-3.5" /> Update XI
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => toss(sel.id)} disabled={!!sel.tossWinner}>
                   <Dice5 className="size-3.5" /> Toss
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => window.open(`/api/matches/${sel.id}/predict`, '_blank')} className="text-emerald-600">
+                  <Brain className="size-3.5" /> Predict
                 </Button>
               </div>
             )}
@@ -144,17 +149,26 @@ export function MatchesTab() {
                   </h4>
                   <div className="space-y-1">
                     {players.map((p) => (
-                      <div key={p.id} className={`flex items-center justify-between p-1.5 rounded text-sm ${xiIds.has(p.id) ? 'bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900' : ''}`}>
+                      <button
+                        key={p.id}
+                        onClick={() => setProfile({
+                          id: p.id, name: p.name, shortName: p.shortName, team: p.team, role: p.role,
+                          battingStyle: p.battingStyle, bowlingStyle: p.bowlingStyle, credit: p.credit,
+                          selectedBy: p.selectedBy, formScore: p.formScore, isPlaying: p.isPlaying,
+                        })}
+                        className={`w-full flex items-center justify-between p-1.5 rounded text-sm transition-colors hover:bg-muted/80 ${xiIds.has(p.id) ? 'bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900' : 'border border-transparent'}`}
+                      >
                         <div className="flex items-center gap-2">
                           <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${p.team === sel.team1Short ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' : 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300'}`}>{p.team}</span>
                           <span className="font-medium">{p.name}</span>
+                          {p.formScore > 70 && <span title="High form" className="size-1.5 rounded-full bg-emerald-500" />}
                         </div>
                         <div className="flex items-center gap-2 text-xs">
                           <Badge variant="outline">{p.role}</Badge>
                           <span className="text-muted-foreground">{p.credit} cr</span>
                           {xiIds.has(p.id) && <CheckCircle2 className="size-3.5 text-emerald-600" />}
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -163,6 +177,7 @@ export function MatchesTab() {
           ) : <p className="text-center text-sm text-muted-foreground py-8">Select a match to view details</p>}
         </CardContent>
       </Card>
+      <PlayerProfileDialog player={profile} onClose={() => setProfile(null)} />
     </div>
   )
 }
