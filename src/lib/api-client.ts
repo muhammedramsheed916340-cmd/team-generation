@@ -152,3 +152,9 @@ export const fantasyApi = {
 export const seedApi = {
   seed: () => api.post('/api/seed'),
 }
+
+// Real teamgeneration.in data (proxied + decrypted)
+export const realApi = {
+  matches: (sport?: string) => api.get<{ source: string; matches: any[]; total: number }>(`/api/real-matches?sport=${sport || 'cricket'}`),
+  match: (id: string) => api.get<{ source: string; matchId: string; match: any }>(`/api/real-match/${id}`),
+}

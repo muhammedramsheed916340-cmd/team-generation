@@ -4,7 +4,7 @@ import { useAuth } from './auth-provider'
 import { useJobsSocket } from '@/hooks/use-jobs-socket'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Trophy, Wifi, WifiOff, LayoutDashboard, Calendar, Sparkles, Send, Crown, ScrollText, Activity, FlaskConical, Zap, Brain, Play, Menu, X } from 'lucide-react'
+import { Trophy, Wifi, WifiOff, LayoutDashboard, Calendar, Sparkles, Send, Crown, ScrollText, Activity, FlaskConical, Zap, Brain, Play, Menu, X, Radio } from 'lucide-react'
 import { DashboardTab } from '@/components/tabs/dashboard-tab'
 import { MatchesTab } from '@/components/tabs/matches-tab'
 import { GeneratorTab } from '@/components/tabs/generator-tab'
@@ -16,6 +16,7 @@ import { MonitoringTab } from '@/components/tabs/monitoring-tab'
 import { TestsTab } from '@/components/tabs/tests-tab'
 import { PredictionsTab } from '@/components/tabs/predictions-tab'
 import { SimulationTab } from '@/components/tabs/simulation-tab'
+import { LiveMatchesTab } from '@/components/tabs/live-matches-tab'
 import { AnimatedTabContent } from '@/components/app/animations'
 
 export function Dashboard() {
@@ -94,6 +95,7 @@ export function Dashboard() {
             <div className="overflow-x-auto pb-0">
               <TabsList className="inline-flex w-max h-auto bg-transparent gap-0 p-0">
                 <TabsTrigger value="dashboard" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><LayoutDashboard className="size-4" /> Dashboard</TabsTrigger>
+                <TabsTrigger value="live" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Radio className="size-4" /> Live Matches</TabsTrigger>
                 <TabsTrigger value="matches" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Calendar className="size-4" /> Matches</TabsTrigger>
                 <TabsTrigger value="predictions" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Brain className="size-4" /> Predictions</TabsTrigger>
                 <TabsTrigger value="simulation" className="gap-1.5 data-[state=active]:bg-[#563d7c] data-[state=active]:text-white text-[#9aa0a6] rounded-none border-b-2 border-transparent data-[state=active]:border-[#563d7c] px-4 py-2.5 text-sm"><Play className="size-4" /> Simulation</TabsTrigger>
@@ -109,6 +111,7 @@ export function Dashboard() {
 
             <div className="py-4">
               <TabsContent value="dashboard" className="mt-0"><AnimatedTabContent tabKey="dashboard"><DashboardTab onNavigate={setTab} /></AnimatedTabContent></TabsContent>
+              <TabsContent value="live" className="mt-0"><AnimatedTabContent tabKey="live"><LiveMatchesTab /></AnimatedTabContent></TabsContent>
               <TabsContent value="matches" className="mt-0"><AnimatedTabContent tabKey="matches"><MatchesTab /></AnimatedTabContent></TabsContent>
               <TabsContent value="predictions" className="mt-0"><AnimatedTabContent tabKey="predictions"><PredictionsTab /></AnimatedTabContent></TabsContent>
               <TabsContent value="simulation" className="mt-0"><AnimatedTabContent tabKey="simulation"><SimulationTab /></AnimatedTabContent></TabsContent>
