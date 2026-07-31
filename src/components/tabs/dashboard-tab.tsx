@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Users, Trophy, Send, Calendar, Activity, Zap, RefreshCw, Sparkles, Brain, Play, TrendingUp, Flame, Target } from 'lucide-react'
-import { healthApi, matchesApi, seedApi } from '@/lib/api-client'
+import { healthApi, matchesApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 
 export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }) {
@@ -23,11 +23,6 @@ export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }
   }
 
   useEffect(() => { void load() }, [])
-
-  const seed = async () => {
-    try { await seedApi.seed(); toast.success('Database seeded'); load() }
-    catch (e: any) { toast.error(e.message) }
-  }
 
   const c = metrics?.counts || {}
 
@@ -77,11 +72,7 @@ export function DashboardTab({ onNavigate }: { onNavigate: (t: string) => void }
         <QuickAction icon={<Brain className="size-5" />} title="Predictions" desc="AI win probability" onClick={() => onNavigate('predictions')} />
         <QuickAction icon={<Play className="size-5" />} title="Simulation" desc="Ball-by-ball sim" onClick={() => onNavigate('simulation')} />
         <QuickAction icon={<Sparkles className="size-5" />} title="AI Generator" desc="GL/SL/H2H teams" onClick={() => onNavigate('generator')} />
-        <QuickAction icon={<Send className="size-5" />} title="Transfer" desc="Bulk to Dream11" onClick={() => onNavigate('transfer')} />
-      </div>
-
-      <div className="flex justify-end">
-        <Button variant="ghost" size="sm" onClick={seed} className="text-[#9aa0a6]"><Zap className="size-3.5" /> Seed demo data</Button>
+        <QuickAction icon={<Send className="size-5" />} title="Transfer" desc="Direct to Dream11" onClick={() => onNavigate('transfer')} />
       </div>
     </div>
   )

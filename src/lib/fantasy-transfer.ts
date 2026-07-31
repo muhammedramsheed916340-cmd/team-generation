@@ -42,12 +42,14 @@ export type ErrorCode =
 // In-memory OTP store: mobile -> { otp, expiresAt, attempts }
 const otpStore = new Map<string, { otp: string; expiresAt: number; attempts: number; platform: string }>()
 
-export function requestOtp(platform: Platform, mobile: string): { otp: string; requestId: string } {
-  // In production we'd send SMS. For demo, return the OTP so the UI can display it.
+export function requestOtp(platform: Platform, mobile: string): { requestId: string } {
+  // Generates an OTP and stores it for verification.
+  // In production, this would call the real platform's OTP API (Dream11/My11Circle)
+  // to send an actual SMS to the user's phone.
   const otp = String(Math.floor(100000 + Math.random() * 900000))
   const requestId = `otp-${platform}-${mobile}-${Date.now()}`
   otpStore.set(`${platform}:${mobile}`, { otp, expiresAt: Date.now() + 5 * 60 * 1000, attempts: 0, platform })
-  return { otp, requestId }
+  return { requestId }
 }
 
 export interface VerifyOtpResult {

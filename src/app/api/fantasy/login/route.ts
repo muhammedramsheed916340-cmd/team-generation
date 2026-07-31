@@ -25,6 +25,5 @@ export const POST = apiHandler(async (req: NextRequest) => {
 
   const { otp, requestId } = requestOtp(platform, mobile)
   await audit({ userId: auth.user.id, action: 'FANTASY_OTP_REQUESTED', details: { platform, mobile }, severity: 'INFO' })
-  // In production we would NOT return the OTP. Demo returns it for convenience.
-  return ok({ requestId, otp, message: 'OTP sent (demo: OTP shown in response)' })
+  return ok({ requestId, message: 'OTP sent to your registered mobile number' })
 })

@@ -236,16 +236,14 @@ function OtpLoginDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
   const [mobile, setMobile] = useState('')
   const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
-  const [demoOtp, setDemoOtp] = useState('')
 
   const requestOtp = async () => {
     if (!/^\d{10}$/.test(mobile)) { toast.error('Enter a valid 10-digit mobile'); return }
     setLoading(true)
     try {
-      const res = await fantasyApi.login(platform, mobile)
-      setDemoOtp(res.otp)
+      await fantasyApi.login(platform, mobile)
       setStep('verify')
-      toast.success(`OTP sent (demo: ${res.otp})`)
+      toast.success(`OTP sent to +91 ${mobile}`)
     } catch (e: any) { toast.error(e.message) }
     finally { setLoading(false) }
   }
@@ -282,7 +280,7 @@ function OtpLoginDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
           </div>
           {step === 'verify' && (
             <div className="space-y-2">
-              <Label>Enter OTP {demoOtp && <span className="text-xs text-emerald-600">(demo: {demoOtp})</span>}</Label>
+              <Label>Enter OTP sent to your phone</Label>
               <InputOTP value={otp} onChange={(v) => setOtp(v)} maxLength={6}>
                 <InputOTPGroup>
                   <InputOTPSlot index={0} /><InputOTPSlot index={1} /><InputOTPSlot index={2} />

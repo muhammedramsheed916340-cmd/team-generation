@@ -4,7 +4,7 @@ import { useAuth } from './auth-provider'
 import { useJobsSocket } from '@/hooks/use-jobs-socket'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Trophy, LogOut, Wifi, WifiOff, LayoutDashboard, Calendar, Sparkles, Send, Crown, ScrollText, Activity, FlaskConical, Zap, Brain, Play, Menu, X } from 'lucide-react'
+import { Trophy, Wifi, WifiOff, LayoutDashboard, Calendar, Sparkles, Send, Crown, ScrollText, Activity, FlaskConical, Zap, Brain, Play, Menu, X } from 'lucide-react'
 import { DashboardTab } from '@/components/tabs/dashboard-tab'
 import { MatchesTab } from '@/components/tabs/matches-tab'
 import { GeneratorTab } from '@/components/tabs/generator-tab'
@@ -19,7 +19,7 @@ import { SimulationTab } from '@/components/tabs/simulation-tab'
 import { AnimatedTabContent } from '@/components/app/animations'
 
 export function Dashboard() {
-  const { user, logout } = useAuth()
+  const { user } = useAuth()
   const { connected } = useJobsSocket()
   const [tab, setTab] = useState('dashboard')
   const [mobileMenu, setMobileMenu] = useState(false)
@@ -79,13 +79,10 @@ export function Dashboard() {
               <span className="font-semibold text-[#f9ab00]">{user?.credits ?? 0}</span>
               <span className="text-[#f9ab00]/70 text-[10px]">cr</span>
             </div>
-            <div className="text-xs text-right hidden md:block">
-              <p className="font-medium leading-tight text-white">{user?.name}</p>
-              <p className="text-[#9aa0a6] leading-tight">{user?.email}</p>
+            <div className="hidden md:block">
+              <p className="font-medium leading-tight text-white text-sm">{user?.name || 'User'}</p>
+              <p className="text-[#9aa0a6] leading-tight text-xs">{user?.credits ?? 0} credits available</p>
             </div>
-            <Button variant="ghost" size="icon" onClick={logout} title="Logout" className="hover:bg-[#d93025]/20 hover:text-[#d93025] text-[#9aa0a6]">
-              <LogOut className="size-4" />
-            </Button>
           </div>
         </div>
       </header>
