@@ -67,7 +67,6 @@ export const api = {
 
 // Auth
 export const authApi = {
-  login: (email: string, password: string) => api.post<{ user: any; accessToken: string; refreshToken: string }>('/api/auth/login', { email, password }),
   me: () => api.get('/api/auth/me'),
 }
 

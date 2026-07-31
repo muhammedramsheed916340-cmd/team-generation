@@ -1,7 +1,6 @@
 /** Small helpers for API route handlers */
 import { NextResponse } from 'next/server'
 import { AuthError } from '@/lib/auth'
-import { trackError } from '@/lib/errors'
 import { ZodError } from 'zod'
 
 export function ok(data: unknown, status = 200) {
@@ -12,7 +11,7 @@ export function fail(message: string, status = 400, code?: string, details?: unk
   return NextResponse.json({ success: false, error: message, code, details }, { status })
 }
 
-/** Wrap an async handler with uniform error handling + audit + error tracking */
+/** Wrap an async handler with uniform error handling */
 export function apiHandler(fn: (req: Request, ctx?: { params: Record<string, string> }) => Promise<NextResponse>) {
   return async (req: Request, ctx?: { params: Promise<Record<string, string>> }) => {
     try {
@@ -26,15 +25,7 @@ export function apiHandler(fn: (req: Request, ctx?: { params: Record<string, str
         return fail('Validation error', 422, 'VALIDATION_ERROR', e.errors)
       }
       const message = e instanceof Error ? e.message : 'Internal server error'
-      const stack = e instanceof Error ? e.stack : undefined
       const url = new URL(req.url)
-      await trackError({
-        message,
-        stack,
-        path: url.pathname,
-        method: req.method,
-        source: 'api',
-      })
       console.error(`[api:${url.pathname}]`, e)
       return fail(message, 500, 'INTERNAL_ERROR')
     }
@@ -50,6 +41,5 @@ export async function parseBody<T = unknown>(req: Request): Promise<T> {
 
 /** Get client IP from request */
 export function getClientIp(req: Request): string | null {
-  const url = new URL(req.url)
   return req.headers.get('x-real-ip') || req.headers.get('x-forwarded-for')?.split(',')[0] || null
 }
