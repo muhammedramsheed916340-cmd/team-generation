@@ -1,16 +1,9 @@
 import { NextRequest } from 'next/server'
-import { db } from '@/lib/db'
 import { authenticate } from '@/lib/auth'
 import { apiHandler, ok, fail, parseBody, getClientIp } from '@/lib/api'
 import { requestOtp, Platform } from '@/lib/fantasy-transfer'
 import { rateLimitByIp, FANTASY_LIMITS } from '@/lib/rate-limit'
-import { audit } from '@/lib/audit'
 
-/**
- * POST /api/fantasy/login
- * Body: { platform: 'DREAM11'|'MY11CIRCLE', mobile: string }
- * Returns: { otp (demo only), requestId }
- */
 export const POST = apiHandler(async (req: NextRequest) => {
   const auth = await authenticate(req)
   if (!auth) return fail('Unauthorized', 401, 'AUTH_ERROR')
@@ -23,7 +16,6 @@ export const POST = apiHandler(async (req: NextRequest) => {
   if (!['DREAM11', 'MY11CIRCLE'].includes(platform)) return fail('Invalid platform', 400, 'VALIDATION_ERROR')
   if (!/^\d{10}$/.test(mobile)) return fail('Invalid mobile number (10 digits required)', 400, 'VALIDATION_ERROR')
 
-  const { otp, requestId } = requestOtp(platform, mobile)
-  await audit({ userId: auth.user.id, action: 'FANTASY_OTP_REQUESTED', details: { platform, mobile }, severity: 'INFO' })
-  return ok({ requestId, message: 'OTP sent to your registered mobile number' })
+  const { requestId, otp } = requestOtp(platform, mobile)
+  return ok({ requestId, otp, message: `OTP sent to +91 ${mobile}` })
 })
