@@ -237,6 +237,8 @@ function OtpLoginDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
   const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [resendsLeft, setResendsLeft] = useState(5)
+  const [otpState, setOtpState] = useState('')
+  const [reasonCode, setReasonCode] = useState<number | null>(null)
 
   const requestOtp = async () => {
     if (!/^\d{10}$/.test(mobile)) { toast.error('Enter a valid 10-digit mobile'); return }
@@ -244,6 +246,8 @@ function OtpLoginDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
     try {
       const res = await fantasyApi.login(platform, mobile)
       setResendsLeft(res.resendsLeft || 5)
+      setOtpState(res.state || '')
+      setReasonCode(res.reasonCode || null)
       setStep('verify')
       toast.success(`OTP sent to +91 ${mobile} via SMS`, { description: 'Check your phone for the OTP' })
     } catch (e: any) { toast.error(e.message) }
@@ -252,9 +256,10 @@ function OtpLoginDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
 
   const verify = async () => {
     if (otp.length !== 6) { toast.error('Enter 6-digit OTP'); return }
+    if (!otpState) { toast.error('Session expired. Request a new OTP.'); setStep('request'); return }
     setLoading(true)
     try {
-      await fantasyApi.verify(platform, mobile, otp)
+      await fantasyApi.verify(platform, mobile, otp, otpState, reasonCode)
       toast.success('Account linked successfully!')
       onSuccess()
     } catch (e: any) { toast.error(e.message) }

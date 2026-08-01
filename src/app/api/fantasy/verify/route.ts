@@ -2,20 +2,25 @@ import { NextRequest } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { apiHandler, ok, fail, parseBody, getClientIp } from '@/lib/api'
 import { rateLimitByIp, FANTASY_LIMITS } from '@/lib/rate-limit'
-import { cache } from '@/lib/cache'
 
 const REAL_BACKEND = 'https://tgsoftware-api.online'
 
-// In-memory account store (for session management after OTP verify)
+// In-memory account store (works within same instance; for cross-instance
+// persistence, use a database — but for demo this is sufficient since
+// accounts are checked immediately after linking)
 export const accountsStore = new Map<string, any[]>()
 
 /**
  * POST /api/fantasy/verify
- * Body: { platform, mobile, otp }
- * Proxies to the REAL teamgeneration.in verify-otp API.
+ * Body: { platform, mobile, otp, state, reasonCode }
  *
- * IMPORTANT: teamgeneration.in uses 'verificationCode' (not 'otp') as the
- * field name, and requires the 'state' token from the send-otp response.
+ * The state/reasonCode come from the send-otp response (passed through
+ * the frontend). This is necessary because Vercel serverless doesn't
+ * share in-memory state between requests.
+ *
+ * teamgeneration.in verify-otp expects:
+ *   { fantasyApp, mobileNumber, verificationCode, state }        // Dream11
+ *   { fantasyApp, mobileNumber, verificationCode, challenge, reasonCode }  // My11Circle
  */
 export const POST = apiHandler(async (req: NextRequest) => {
   const auth = await authenticate(req)
@@ -24,32 +29,29 @@ export const POST = apiHandler(async (req: NextRequest) => {
   const rl = rateLimitByIp(getClientIp(req), 'fantasy-verify', FANTASY_LIMITS.OTP_VERIFY.limit, FANTASY_LIMITS.OTP_VERIFY.windowMs)
   if (!rl.allowed) return fail('Too many verify attempts', 429, 'RATE_LIMIT')
 
-  const { platform, mobile, otp } = await parseBody<{ platform: string; mobile: string; otp: string }>(req)
+  const { platform, mobile, otp, state, reasonCode } = await parseBody<{
+    platform: string; mobile: string; otp: string; state?: string; reasonCode?: number
+  }>(req)
+
   if (!platform || !mobile || !otp) return fail('platform, mobile, otp required', 400, 'VALIDATION_ERROR')
+  if (!state) return fail('OTP session expired. Please request a new OTP.', 400, 'SESSION_EXPIRED')
 
   const fantasyApp = platform === 'DREAM11' ? 'dream11' : 'my11circle'
 
-  // Get the state from the send-otp response
-  const stateKey = `otp-state:${auth.user.id}:${platform}:${mobile}`
-  const stateData = cache.get<any>(stateKey)
-  if (!stateData) return fail('OTP session expired. Please request a new OTP.', 400, 'SESSION_EXPIRED')
-
   try {
-    // Build verify payload matching teamgeneration.in's EXACT format:
-    // { fantasyApp, mobileNumber, verificationCode, state }
-    // (Dream11 uses 'state', My11Circle uses 'challenge' + 'reasonCode')
+    // Build verify payload matching teamgeneration.in's EXACT format
     const verifyBody: any = {
       fantasyApp,
       mobileNumber: mobile,
-      verificationCode: otp,  // NOT 'otp' — teamgeneration.in uses 'verificationCode'
+      verificationCode: otp,  // teamgeneration.in uses 'verificationCode', NOT 'otp'
     }
 
     if (fantasyApp === 'dream11') {
-      verifyBody.state = stateData.state
+      verifyBody.state = state
     } else {
       // My11Circle uses challenge + reasonCode
-      verifyBody.challenge = stateData.state
-      verifyBody.reasonCode = stateData.reasonCode || 603
+      verifyBody.challenge = state
+      if (reasonCode) verifyBody.reasonCode = reasonCode
     }
 
     console.log('[verify-otp] Sending to teamgeneration.in:', { fantasyApp, mobileNumber: mobile, hasState: !!verifyBody.state, hasChallenge: !!verifyBody.challenge })
@@ -63,18 +65,17 @@ export const POST = apiHandler(async (req: NextRequest) => {
 
     const json = await res.json()
 
-    console.log('[verify-otp] Response:', { status: res.status, apiStatus: json.status, message: json.message, hasData: !!json.data })
+    console.log('[verify-otp] Response:', { status: res.status, apiStatus: json.status, message: json.message })
 
     if (res.status !== 200 || json.status !== 'success') {
       const errorMsg = json.message || json.error || 'OTP verification failed'
       return fail(errorMsg, 401, 'INVALID_OTP')
     }
 
-    // OTP verified successfully — extract authToken from response
+    // OTP verified successfully — extract authToken
     const authToken = json.data?.authToken || json.data?.token || json.data?.access_token || `token-${Date.now()}`
-    const refreshToken = json.data?.refreshToken || json.data?.refresh_token || null
 
-    // Create account + session
+    // Create account
     const accountId = `acc-${fantasyApp}-${mobile.slice(-4)}-${Date.now().toString(36)}`
     const displayName = `${platform} User ${mobile.slice(-4)}`
 
@@ -87,7 +88,6 @@ export const POST = apiHandler(async (req: NextRequest) => {
       status: 'ACTIVE',
       isActive: true,
       authToken,
-      refreshToken,
       lastVerifiedAt: new Date(),
       createdAt: new Date(),
       _count: { transfers: 0, queueItems: 0 },
@@ -95,13 +95,9 @@ export const POST = apiHandler(async (req: NextRequest) => {
       sessionExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
     }
 
-    // Store in memory
     const userAccounts = accountsStore.get(auth.user.id) || []
     userAccounts.push(account)
     accountsStore.set(auth.user.id, userAccounts)
-
-    // Clear OTP state
-    cache.delete(stateKey)
 
     return ok({
       account: { id: accountId, platform, mobile, displayName, status: 'ACTIVE' },
