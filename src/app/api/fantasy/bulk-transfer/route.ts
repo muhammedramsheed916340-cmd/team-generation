@@ -7,22 +7,19 @@ const REAL_BACKEND = 'https://tgsoftware-api.online'
 
 /**
  * POST /api/fantasy/bulk-transfer
- * Body: { accountId, authToken, matchId, matchName, platform, mode, totalTeams, template }
  *
  * Proxies to teamgeneration.in's transfer API:
- *   POST /api/classic/dream11/addteam (Dream11)
- *   POST /api/classic/my11circle/addteam (My11Circle) — if exists
+ *   POST /api/classic/dream11/addteam
+ *   POST /api/classic/my11circle/addteam
  *
- * teamgeneration.in expects EXACTLY:
+ * EXACT payload (from teamgeneration.in JS analysis):
  *   {
- *     tgMatchId: "<match_id>",
- *     playerData: [<player_object>, ...],   // array of player objects
- *     captainData: <player_object>,          // captain player object
- *     vicecaptainData: <player_object>,      // VC player object
+ *     tgMatchId: "<match_id>",              // string
+ *     playerData: ["<pl_id>", "<pl_id>", ...],  // array of player ID strings
+ *     captainData: "<pl_id>",               // captain player ID string
+ *     vicecaptainData: "<pl_id>",           // VC player ID string
  *     generateLinkFlag: "general"
  *   }
- *
- * player_object = { name, player_id, ... } from teamgeneration.in
  */
 export const POST = apiHandler(async (req: NextRequest) => {
   const auth = await authenticate(req)
@@ -45,30 +42,14 @@ export const POST = apiHandler(async (req: NextRequest) => {
   const t = body.template
   const matchId = body.matchId || body.matchName
 
-  // Build player objects for the classic transfer API
-  // teamgeneration.in expects player objects, not just IDs
-  const playerData = t.players.map((p: any) => ({
-    player_id: p.externalId,
-    name: p.name,
-    role: p.role,
-  }))
+  // Build playerData: array of pl_id strings (player IDs as strings)
+  const playerData = t.players.map((p: any) => String(p.externalId))
 
-  const captainPlayer = t.players.find((p: any) => p.externalId === t.captainExternalId) || t.players[0]
-  const vcPlayer = t.players.find((p: any) => p.externalId === t.viceCaptainExternalId) || t.players[1]
+  // captainData and vicecaptainData are pl_id strings
+  const captainData = String(t.captainExternalId)
+  const vicecaptainData = String(t.viceCaptainExternalId)
 
-  const captainData = {
-    player_id: captainPlayer.externalId,
-    name: captainPlayer.name,
-    role: captainPlayer.role,
-  }
-
-  const vicecaptainData = {
-    player_id: vcPlayer.externalId,
-    name: vcPlayer.name,
-    role: vcPlayer.role,
-  }
-
-  // Build EXACT payload matching teamgeneration.in's classic/dream11/addteam
+  // Build EXACT payload matching teamgeneration.in's format
   const transferPayload = {
     tgMatchId: String(matchId),
     playerData,
@@ -80,13 +61,12 @@ export const POST = apiHandler(async (req: NextRequest) => {
   const platform = (body.platform || 'DREAM11').toLowerCase()
   const endpoint = `/api/classic/${platform}/addteam`
 
-  console.log('[bulk-transfer] Sending to teamgeneration.in:', { endpoint, payload: JSON.stringify(transferPayload).slice(0, 500) })
+  console.log('[bulk-transfer] Sending to teamgeneration.in:', { endpoint, payload: JSON.stringify(transferPayload) })
 
   let successCount = 0
   let failedCount = 0
   const errors: string[] = []
 
-  // Transfer each team
   for (let i = 0; i < body.totalTeams; i++) {
     try {
       const res = await fetch(`${REAL_BACKEND}${endpoint}`, {
