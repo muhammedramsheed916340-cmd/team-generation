@@ -138,7 +138,7 @@ export const fantasyApi = {
   accounts: () => api.get<{ accounts: any[] }>('/api/fantasy/accounts'),
   createTeam: (accountId: string, matchName: string, template: any) => api.post<{ transfer: any; result: any }>('/api/fantasy/create-team', { accountId, matchName, template }),
   editTeam: (accountId: string, matchName: string, platformTeamId: string, template: any) => api.post<{ transfer: any; result: any }>('/api/fantasy/edit-team', { accountId, matchName, platformTeamId, template }),
-  bulkTransfer: (body: any) => api.post<{ queueId: string; status: string; totalTeams: number }>('/api/fantasy/bulk-transfer', body),
+  bulkTransfer: (body: any) => api.post<{ queueId: string; status: string; totalTeams: number; successCount: number; failedCount: number }>('/api/fantasy/bulk-transfer', body),
   remainingTransfer: (accountId: string) => api.post<{ dailyLimit: number; usedToday: number; remaining: number; resetsAt: string }>('/api/fantasy/remaining-transfer', { accountId }),
   transferStatus: (id: string, process?: boolean) => api.get<any>(`/api/fantasy/transfer-status/${id}${process ? '?process=true' : ''}`),
   transferHistory: (accountId?: string, status?: string) => api.get<{ transfers: any[]; total: number; successCount: number; failedCount: number }>(`/api/fantasy/transfer-history${accountId || status ? `?${accountId ? `accountId=${accountId}&` : ''}${status ? `status=${status}` : ''}` : ''}`),

@@ -25,10 +25,20 @@ export function TransferTab() {
   const [queues, setQueues] = useState<any[]>([])
   const [history, setHistory] = useState<any[]>({ transfers: [], total: 0, successCount: 0, failedCount: 0 } as any)
 
-  const loadAll = useCallback(async () => {
+  const ACCOUNTS_KEY = 'tg_fantasy_accounts'
+
+  const loadAccounts = () => {
     try {
-      const [acc, q, h] = await Promise.all([fantasyApi.accounts(), fantasyApi.queueList(), fantasyApi.transferHistory()])
-      setAccounts(acc.accounts)
+      const stored = localStorage.getItem(ACCOUNTS_KEY)
+      const accs = stored ? JSON.parse(stored) : []
+      setAccounts(accs)
+    } catch { setAccounts([]) }
+  }
+
+  const loadAll = useCallback(async () => {
+    loadAccounts()
+    try {
+      const [q, h] = await Promise.all([fantasyApi.queueList(), fantasyApi.transferHistory().catch(() => ({ transfers: [], total: 0, successCount: 0, failedCount: 0 }))])
       setQueues(q.queues)
       setHistory(h)
     } catch (e: any) { toast.error(e.message) }
@@ -200,7 +210,14 @@ function AccountCard({ account, onChanged }: any) {
   }
   const logout = async () => {
     setLoading(true)
-    try { await fantasyApi.logout(account.id); toast.success('Logged out'); onChanged() } catch (e: any) { toast.error(e.message) }
+    try {
+      // Remove from localStorage
+      const ACCOUNTS_KEY = 'tg_fantasy_accounts'
+      const existing = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]')
+      const updated = existing.filter((a: any) => a.id !== account.id)
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(updated))
+      toast.success('Logged out'); onChanged()
+    } catch (e: any) { toast.error(e.message) }
     finally { setLoading(false) }
   }
   useEffect(() => { checkRemaining() }, [])
@@ -259,7 +276,12 @@ function OtpLoginDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
     if (!otpState) { toast.error('Session expired. Request a new OTP.'); setStep('request'); return }
     setLoading(true)
     try {
-      await fantasyApi.verify(platform, mobile, otp, otpState, reasonCode)
+      const res = await fantasyApi.verify(platform, mobile, otp, otpState, reasonCode)
+      // Store account in localStorage (works on Vercel — no server memory needed)
+      const ACCOUNTS_KEY = 'tg_fantasy_accounts'
+      const existing = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]')
+      existing.push(res.account)
+      localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(existing))
       toast.success('Account linked successfully!')
       onSuccess()
     } catch (e: any) { toast.error(e.message) }
@@ -364,13 +386,17 @@ function NewTransferPanel({ accounts, onDone }: any) {
         viceCaptainName: selectedTeam.viceCaptainName,
       }
       const selMatch = matches.find((m) => m.id === matchId)
+      // Get authToken from the selected account (stored in localStorage)
+      const selAccount = accounts.find((a: any) => a.id === accountId)
       const res = await fantasyApi.bulkTransfer({
-        accountId, matchId, matchName: selMatch ? `${selMatch.team1} vs ${selMatch.team2}` : 'Custom', mode,
-        totalTeams: totalTeams[0], concurrency: concurrency[0], maxRetries: maxRetries[0],
-        replaceTeamIds: mode === 'REPLACE_SPECIFIC' ? replaceIds.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
+        accountId, authToken: selAccount?.authToken, matchId,
+        matchName: selMatch ? `${selMatch.team1} vs ${selMatch.team2}` : 'Custom',
+        mode: 'CREATE',
+        totalTeams: totalTeams[0],
+        platform: selAccount?.platform || 'DREAM11',
         template,
       })
-      toast.success(`Transferred ${res.totalTeams} teams successfully!`)
+      toast.success(`Transferred ${res.totalTeams} teams! (${res.successCount || 0} success, ${res.failedCount || 0} failed)`)
       onDone()
     } catch (e: any) { toast.error(e.message) }
     finally { setSubmitting(false) }
