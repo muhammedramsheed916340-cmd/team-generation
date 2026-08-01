@@ -9,12 +9,20 @@ const REAL_BACKEND = 'https://tgsoftware-api.online'
  * POST /api/fantasy/bulk-transfer
  * Body: { accountId, authToken, matchName, platform, mode, totalTeams, template }
  *
- * Proxies team transfer to teamgeneration.in's API using the authToken
- * from the frontend (stored in localStorage after OTP verify).
+ * Proxies to teamgeneration.in's transfer API:
+ *   Dream11: POST /api/dream11/addteam
+ *   My11Circle: POST /api/my11circle/add-match
  *
- * teamgeneration.in transfer endpoint:
- * POST /api/dream11/addteam (for Dream11)
- * Body: { matchId, captain, vice_captain, players, fantasyApp, authToken, sportIndex, type }
+ * teamgeneration.in expects:
+ *   { matchId, captain, vice_captain, players, fantasyApp, authToken, sportIndex, type }
+ *
+ * - captain: player ID (string)
+ * - vice_captain: player ID (string)
+ * - players: array of player IDs (strings)
+ * - fantasyApp: "dream11" | "my11circle"
+ * - authToken: from OTP verify response
+ * - sportIndex: 0 (cricket)
+ * - type: "new" for create, "edit" for replace
  */
 export const POST = apiHandler(async (req: NextRequest) => {
   const auth = await authenticate(req)
@@ -34,75 +42,71 @@ export const POST = apiHandler(async (req: NextRequest) => {
     return fail('totalTeams must be 1-500', 400, 'VALIDATION_ERROR')
   }
 
-  // If we have a real authToken from OTP verify, try real transfer via teamgeneration.in
+  const t = body.template
+  const fantasyApp = (body.platform || 'DREAM11').toLowerCase()
+
+  // If we have a real authToken from OTP verify, use real teamgeneration.in transfer
   if (body.authToken) {
-    try {
-      const fantasyApp = (body.platform || 'DREAM11').toLowerCase()
-      const t = body.template
-      const transferBody = {
-        matchId: body.matchName,
-        captain: t.captainExternalId,
-        vice_captain: t.viceCaptainExternalId,
-        players: t.players.map((p: any) => p.externalId),
-        fantasyApp,
-        authToken: body.authToken,
-        sportIndex: 0,
-        type: body.mode === 'REPLACE' || body.mode === 'REPLACE_SPECIFIC' ? 'edit' : 'new',
-      }
-
-      console.log('[bulk-transfer] Sending to teamgeneration.in:', { fantasyApp, hasToken: !!body.authToken, playerCount: t.players.length })
-
-      let successCount = 0
-      let failedCount = 0
-
-      // Transfer each team
-      for (let i = 0; i < body.totalTeams; i++) {
-        try {
-          const res = await fetch(`${REAL_BACKEND}/api/${fantasyApp}/addteam`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify(transferBody),
-            signal: AbortSignal.timeout(15000),
-          })
-          if (res.ok) {
-            const json = await res.json()
-            if (json.status === 'success') successCount++
-            else failedCount++
-          } else {
-            failedCount++
-          }
-        } catch {
-          failedCount++
-        }
-      }
-
-      return ok({
-        queueId: `q-${Date.now()}`,
-        status: 'COMPLETED',
-        totalTeams: body.totalTeams,
-        successCount,
-        failedCount,
-      }, 202)
-    } catch (e: any) {
-      console.error('[bulk-transfer] Provider error:', e.message)
-      // Fall through to simulation below
+    // Build the EXACT payload teamgeneration.in expects
+    const transferPayload = {
+      matchId: body.matchName, // match identifier
+      captain: String(t.captainExternalId), // player ID
+      vice_captain: String(t.viceCaptainExternalId), // player ID
+      players: t.players.map((p: any) => String(p.externalId)), // array of player IDs
+      fantasyApp,
+      authToken: body.authToken,
+      sportIndex: 0, // cricket
+      type: body.mode === 'REPLACE' || body.mode === 'REPLACE_SPECIFIC' ? 'edit' : 'new',
     }
+
+    const endpoint = fantasyApp === 'dream11' ? '/api/dream11/addteam' : '/api/my11circle/add-match'
+    console.log('[bulk-transfer] Sending to teamgeneration.in:', { endpoint, payload: JSON.stringify(transferPayload).slice(0, 300) })
+
+    let successCount = 0
+    let failedCount = 0
+    const errors: string[] = []
+
+    // Transfer each team (same template for all in bulk)
+    for (let i = 0; i < body.totalTeams; i++) {
+      try {
+        const res = await fetch(`${REAL_BACKEND}${endpoint}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify(transferPayload),
+          signal: AbortSignal.timeout(15000),
+        })
+
+        const text = await res.text()
+        console.log(`[bulk-transfer] Team ${i + 1} response:`, { status: res.status, body: text.slice(0, 200) })
+
+        let json: any
+        try { json = JSON.parse(text) } catch { json = { status: 'fail', message: 'Invalid response' } }
+
+        if (res.status === 200 && (json.status === 'success' || json.success === true)) {
+          successCount++
+        } else {
+          failedCount++
+          errors.push(json.message || `Team ${i + 1} failed`)
+        }
+      } catch (e: any) {
+        console.error(`[bulk-transfer] Team ${i + 1} error:`, e.message)
+        failedCount++
+        errors.push(e.message)
+      }
+    }
+
+    return ok({
+      queueId: `q-${Date.now()}`,
+      status: 'COMPLETED',
+      totalTeams: body.totalTeams,
+      successCount,
+      failedCount,
+      errors: errors.slice(0, 5), // Return first 5 errors
+      provider: 'teamgeneration.in',
+      endpoint,
+    }, 202)
   }
 
-  // Fallback: simulate transfer (no real authToken)
-  const queueId = `q-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-  let successCount = 0
-  let failedCount = 0
-  for (let i = 0; i < body.totalTeams; i++) {
-    if (Math.random() < 0.95) successCount++
-    else failedCount++
-  }
-
-  return ok({
-    queueId,
-    status: 'COMPLETED',
-    totalTeams: body.totalTeams,
-    successCount,
-    failedCount,
-  }, 202)
+  // No authToken — can't transfer without linked account
+  return fail('No authToken. Link your fantasy account first via OTP.', 401, 'NO_AUTH_TOKEN')
 })

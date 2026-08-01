@@ -72,13 +72,18 @@ export function GeneratorTab() {
       const res = await fantasyApi.bulkTransfer({
         accountId: account.id,
         authToken: account.authToken,
-        matchName: matchInfo ? `${matchInfo.team1} vs ${matchInfo.team2}` : 'Custom',
+        matchId: matchId, // real match ID from teamgeneration.in
+        matchName: matchInfo ? `${matchInfo.team1} vs ${matchInfo.team2}` : matchId,
         mode: 'CREATE',
         totalTeams: 1,
         platform: account.platform || 'DREAM11',
         template,
       })
-      toast.success(`Team transferred! (${res.successCount || 1} success, ${res.failedCount || 0} failed)`)
+      if (res.failedCount > 0 && res.successCount === 0) {
+        toast.error(`Transfer failed: ${res.errors?.[0] || 'Unknown error'}`)
+      } else {
+        toast.success(`Team transferred! ${res.successCount} success, ${res.failedCount} failed`)
+      }
     } catch (e: any) {
       toast.error('Transfer failed: ' + e.message)
     }
