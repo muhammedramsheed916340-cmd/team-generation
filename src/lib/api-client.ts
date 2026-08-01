@@ -132,7 +132,7 @@ export const testApi = {
 
 // Fantasy Transfer
 export const fantasyApi = {
-  login: (platform: string, mobile: string) => api.post<{ requestId: string; otp: string; message: string }>('/api/fantasy/login', { platform, mobile }),
+  login: (platform: string, mobile: string) => api.post<{ requestId: string; message: string; retriesLeft: number; resendsLeft: number }>('/api/fantasy/login', { platform, mobile }),
   verify: (platform: string, mobile: string, otp: string) => api.post<{ account: any; sessionId: string; expiresAt: string }>('/api/fantasy/verify', { platform, mobile, otp }),
   logout: (accountId: string) => api.post('/api/fantasy/logout', { accountId }),
   accounts: () => api.get<{ accounts: any[] }>('/api/fantasy/accounts'),

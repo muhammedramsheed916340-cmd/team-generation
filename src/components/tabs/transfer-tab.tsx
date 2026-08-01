@@ -235,23 +235,17 @@ function OtpLoginDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
   const [platform, setPlatform] = useState('DREAM11')
   const [mobile, setMobile] = useState('')
   const [otp, setOtp] = useState('')
-  const [generatedOtp, setGeneratedOtp] = useState('')
   const [loading, setLoading] = useState(false)
+  const [resendsLeft, setResendsLeft] = useState(5)
 
   const requestOtp = async () => {
     if (!/^\d{10}$/.test(mobile)) { toast.error('Enter a valid 10-digit mobile'); return }
     setLoading(true)
     try {
       const res = await fantasyApi.login(platform, mobile)
-      // The backend returns the OTP in the response (for demo/sandbox environments
-      // where real SMS isn't available). Display it so the user can enter it.
-      if (res.otp) {
-        setGeneratedOtp(res.otp)
-        toast.success(`OTP sent to +91 ${mobile}`, { description: `Your OTP: ${res.otp}` })
-      } else {
-        toast.success(`OTP sent to +91 ${mobile}`)
-      }
+      setResendsLeft(res.resendsLeft || 5)
       setStep('verify')
+      toast.success(`OTP sent to +91 ${mobile} via SMS`, { description: 'Check your phone for the OTP' })
     } catch (e: any) { toast.error(e.message) }
     finally { setLoading(false) }
   }
@@ -288,19 +282,14 @@ function OtpLoginDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
           </div>
           {step === 'verify' && (
             <div className="space-y-2">
-              <Label>Enter OTP sent to your phone</Label>
-              {generatedOtp && (
-                <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900 text-sm text-center">
-                  <span className="text-emerald-700 dark:text-emerald-400 font-medium">Your OTP: </span>
-                  <span className="font-mono font-bold text-lg text-emerald-700 dark:text-emerald-400 tracking-widest">{generatedOtp}</span>
-                </div>
-              )}
+              <Label>Enter OTP sent to +91 {mobile}</Label>
               <InputOTP value={otp} onChange={(v) => setOtp(v)} maxLength={6}>
                 <InputOTPGroup>
                   <InputOTPSlot index={0} /><InputOTPSlot index={1} /><InputOTPSlot index={2} />
                   <InputOTPSlot index={3} /><InputOTPSlot index={4} /><InputOTPSlot index={5} />
                 </InputOTPGroup>
               </InputOTP>
+              <p className="text-xs text-muted-foreground">Resends left: {resendsLeft}</p>
             </div>
           )}
         </div>
