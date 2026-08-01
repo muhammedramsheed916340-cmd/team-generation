@@ -8,8 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Slider } from '@/components/ui/slider'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Separator } from '@/components/ui/separator'
-import { Sparkles, Wand2, Loader2, Crown, Star, TrendingUp, Shield, Layers, RefreshCw, AlertCircle, Radio } from 'lucide-react'
-import { realApi } from '@/lib/api-client'
+import { Sparkles, Wand2, Loader2, Crown, Star, TrendingUp, Shield, Layers, RefreshCw, AlertCircle, Radio, Send, Download } from 'lucide-react'
+import { realApi, fantasyApi } from '@/lib/api-client'
 import { toast } from 'sonner'
 
 const STRATEGIES = [
@@ -42,7 +42,6 @@ export function GeneratorTab() {
     setGenerating(true)
     setTeams([])
     try {
-      // Use real generation API with real player data
       const res = await realApi.generate(matchId, strategy, count[0])
       setTeams(res.teams || [])
       setMatchInfo(res.match)
@@ -50,6 +49,39 @@ export function GeneratorTab() {
     } catch (e: any) {
       toast.error(e.message)
     } finally { setGenerating(false) }
+  }
+
+  // Transfer a single generated team to Dream11/My11Circle
+  const transferTeam = async (team: any) => {
+    // Get linked account from localStorage
+    const ACCOUNTS_KEY = 'tg_fantasy_accounts'
+    const accounts = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]')
+    if (accounts.length === 0) {
+      toast.error('No fantasy account linked. Go to Fantasy Transfer tab to link your account first.')
+      return
+    }
+    const account = accounts[0] // Use first linked account
+    const template = {
+      players: team.players.map((p: any) => ({ externalId: String(p.id), name: p.name, role: p.role })),
+      captainExternalId: String(team.captainId),
+      viceCaptainExternalId: String(team.viceCaptainId),
+      captainName: team.captainName,
+      viceCaptainName: team.viceCaptainName,
+    }
+    try {
+      const res = await fantasyApi.bulkTransfer({
+        accountId: account.id,
+        authToken: account.authToken,
+        matchName: matchInfo ? `${matchInfo.team1} vs ${matchInfo.team2}` : 'Custom',
+        mode: 'CREATE',
+        totalTeams: 1,
+        platform: account.platform || 'DREAM11',
+        template,
+      })
+      toast.success(`Team transferred! (${res.successCount || 1} success, ${res.failedCount || 0} failed)`)
+    } catch (e: any) {
+      toast.error('Transfer failed: ' + e.message)
+    }
   }
 
   const selMatch = matches.find((m) => m.id === matchId)
@@ -142,13 +174,20 @@ export function GeneratorTab() {
       {/* Results */}
       <Card className="bg-[#202124] border-[#3c4043] flex flex-col max-h-[calc(100vh-12rem)]">
         <CardHeader className="pb-3 flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Layers className="size-4" /> Generated Teams ({teams.length})
-          </CardTitle>
-          {matchInfo && (
-            <Badge variant="outline" className="text-[10px] border-[#3c4043] text-[#9aa0a6]">
-              {matchInfo.team1} vs {matchInfo.team2}
-            </Badge>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Layers className="size-4" /> Generated Teams ({teams.length})
+            </CardTitle>
+            {matchInfo && (
+              <Badge variant="outline" className="text-[10px] border-[#3c4043] text-[#9aa0a6]">
+                {matchInfo.team1} vs {matchInfo.team2}
+              </Badge>
+            )}
+          </div>
+          {teams.length > 0 && (
+            <Button size="sm" className="bg-[#563d7c] hover:bg-[#6b4ba3] text-white" onClick={() => transferTeam(teams[0])}>
+              <Send className="size-3.5" /> Transfer All
+            </Button>
           )}
         </CardHeader>
         <CardContent className="flex-1 overflow-hidden">
@@ -161,7 +200,7 @@ export function GeneratorTab() {
                   <p className="text-xs mt-1">Uses real player data from teamgeneration.in</p>
                 </div>
               ) : (
-                teams.map((t, i) => <TeamCard key={i} team={t} index={i} />)
+                teams.map((t, i) => <TeamCard key={i} team={t} index={i} onTransfer={transferTeam} />)
               )}
             </div>
           </ScrollArea>
@@ -171,9 +210,18 @@ export function GeneratorTab() {
   )
 }
 
-function TeamCard({ team, index }: { team: any; index: number }) {
+function TeamCard({ team, index, matchName, onTransfer }: { team: any; index: number; matchName?: string; onTransfer?: (team: any) => void }) {
   const captain = team.players?.find((p: any) => p.isCaptain)
   const vc = team.players?.find((p: any) => p.isViceCaptain)
+  const [transferring, setTransferring] = useState(false)
+
+  const handleTransfer = async () => {
+    if (!onTransfer) return
+    setTransferring(true)
+    try {
+      await onTransfer(team)
+    } finally { setTransferring(false) }
+  }
 
   return (
     <div className="rounded-lg border border-[#3c4043] bg-[#28292c] p-3">
@@ -223,6 +271,18 @@ function TeamCard({ team, index }: { team: any; index: number }) {
         )}
         <span className="ml-auto text-[#9aa0a6]">{team.team1Count}-{team.team2Count}</span>
       </div>
+      {/* Transfer button — always visible */}
+      {onTransfer && (
+        <Button
+          size="sm"
+          className="w-full mt-2 bg-[#563d7c] hover:bg-[#6b4ba3] text-white"
+          onClick={handleTransfer}
+          disabled={transferring}
+        >
+          {transferring ? <Loader2 className="size-3.5 animate-spin" /> : <Send className="size-3.5" />}
+          Transfer to Dream11
+        </Button>
+      )}
     </div>
   )
 }
