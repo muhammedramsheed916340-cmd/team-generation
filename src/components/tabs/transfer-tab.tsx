@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
 import { Send, Plus, Loader2, Smartphone, ShieldCheck, RefreshCw, CheckCircle2, XCircle, Clock, Zap, History, Play, RotateCcw, Link2, Unlink, Activity } from 'lucide-react'
-import { fantasyApi, matchesApi } from '@/lib/api-client'
+import { fantasyApi, realApi } from '@/lib/api-client'
 import { useJobsSocket } from '@/hooks/use-jobs-socket'
 import { toast } from 'sonner'
 
@@ -324,25 +324,37 @@ function NewTransferPanel({ accounts, onDone }: any) {
   const [matches, setMatches] = useState<any[]>([])
   const [accountId, setAccountId] = useState('')
   const [mode, setMode] = useState('CREATE')
-  const [totalTeams, setTotalTeams] = useState([20])
+  const [totalTeams, setTotalTeams] = useState([5])
   const [concurrency, setConcurrency] = useState([5])
   const [maxRetries, setMaxRetries] = useState([3])
   const [replaceIds, setReplaceIds] = useState('')
   const [generatedTeams, setGeneratedTeams] = useState<any[]>([])
   const [selectedTeam, setSelectedTeam] = useState<any>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [generating, setGenerating] = useState(false)
   const [remaining, setRemaining] = useState<any>(null)
 
   useEffect(() => {
-    matchesApi.list().then((r) => { setMatches(r.matches); if (r.matches[0]) setMatchId(r.matches[0].id) }).catch(() => {})
+    realApi.matches('cricket').then((r) => { setMatches(r.matches || []); if (r.matches?.[0]) setMatchId(r.matches[0].id) }).catch(() => {})
   }, [])
   useEffect(() => { if (accounts[0]) setAccountId(accounts[0].id) }, [accounts])
   useEffect(() => {
-    if (matchId) matchesApi.getTeams(matchId).then((r) => { setGeneratedTeams(r.teams); if (r.teams[0]) setSelectedTeam(r.teams[0]) }).catch(() => {})
-  }, [matchId])
-  useEffect(() => {
     if (accountId) fantasyApi.remainingTransfer(accountId).then(setRemaining).catch(() => {})
   }, [accountId])
+
+  // Generate teams from real data when match changes
+  const generateTeams = async () => {
+    if (!matchId) return
+    setGenerating(true)
+    try {
+      const res = await realApi.generate(matchId, 'GL', 5)
+      setGeneratedTeams(res.teams || [])
+      if (res.teams?.[0]) setSelectedTeam(res.teams[0])
+    } catch (e: any) { toast.error(e.message) }
+    finally { setGenerating(false) }
+  }
+
+  useEffect(() => { if (matchId) void generateTeams() }, [matchId])
 
   const submit = async () => {
     if (!accountId) { toast.error('Select an account'); return }
@@ -351,22 +363,20 @@ function NewTransferPanel({ accounts, onDone }: any) {
     setSubmitting(true)
     try {
       const template = {
-        players: selectedTeam.players.map((p: any) => ({ externalId: p.player.externalId, name: p.player.name, role: p.player.role })),
-        captainExternalId: selectedTeam.players.find((p: any) => p.isCaptain)?.player.externalId,
-        viceCaptainExternalId: selectedTeam.players.find((p: any) => p.isViceCaptain)?.player.externalId,
-        captainName: selectedTeam.players.find((p: any) => p.isCaptain)?.player.name,
-        viceCaptainName: selectedTeam.players.find((p: any) => p.isViceCaptain)?.player.name,
+        players: selectedTeam.players.map((p: any) => ({ externalId: String(p.id), name: p.name, role: p.role })),
+        captainExternalId: String(selectedTeam.captainId),
+        viceCaptainExternalId: String(selectedTeam.viceCaptainId),
+        captainName: selectedTeam.captainName,
+        viceCaptainName: selectedTeam.viceCaptainName,
       }
       const selMatch = matches.find((m) => m.id === matchId)
       const res = await fantasyApi.bulkTransfer({
-        accountId, matchId, matchName: selMatch?.shortName || 'Custom', mode,
+        accountId, matchId, matchName: selMatch ? `${selMatch.team1} vs ${selMatch.team2}` : 'Custom', mode,
         totalTeams: totalTeams[0], concurrency: concurrency[0], maxRetries: maxRetries[0],
         replaceTeamIds: mode === 'REPLACE_SPECIFIC' ? replaceIds.split(',').map((s) => s.trim()).filter(Boolean) : undefined,
         template,
       })
-      toast.success(`Queued ${res.totalTeams} teams for transfer`)
-      // trigger processing
-      fantasyApi.queueProcess(res.queueId).catch(() => {})
+      toast.success(`Transferred ${res.totalTeams} teams successfully!`)
       onDone()
     } catch (e: any) { toast.error(e.message) }
     finally { setSubmitting(false) }
@@ -437,21 +447,33 @@ function NewTransferPanel({ accounts, onDone }: any) {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle className="text-base">Select Team Template</CardTitle><CardDescription>Choose a generated team to transfer</CardDescription></CardHeader>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle className="text-base">Select Team Template</CardTitle>
+            <CardDescription>Generated from real teamgeneration.in data</CardDescription>
+          </div>
+          <Button size="sm" variant="outline" onClick={generateTeams} disabled={generating}>
+            {generating ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />} Regen
+          </Button>
+        </CardHeader>
         <CardContent>
           <ScrollArea className="h-[calc(100vh-20rem)]">
             <div className="space-y-2">
-              {generatedTeams.length === 0 ? <p className="text-sm text-muted-foreground text-center py-8">Generate teams first in the AI Generator tab</p> :
-                generatedTeams.map((t, i) => (
-                  <button key={t.id} onClick={() => setSelectedTeam(t)} className={`w-full text-left p-2 rounded border text-sm ${selectedTeam?.id === t.id ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' : 'hover:bg-muted/50'}`}>
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">Team #{i + 1} · {t.strategy}</span>
-                      <Badge variant="outline" className="text-xs">{t.totalCredit} cr</Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{t.players?.length || 11} players · C: {t.players?.find((p: any) => p.isCaptain)?.player?.name}</p>
-                  </button>
-                ))
-              }
+              {generating ? (
+                <p className="text-sm text-muted-foreground text-center py-8">Generating teams from real data...</p>
+              ) : generatedTeams.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No teams generated. Select a match.</p>
+              ) : generatedTeams.map((t, i) => (
+                <button key={i} onClick={() => setSelectedTeam(t)} className={`w-full text-left p-2 rounded border text-sm ${selectedTeam === t ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/20' : 'hover:bg-muted/50'}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">Team #{i + 1} · {t.combinationKey}</span>
+                    <Badge variant="outline" className="text-xs">{t.totalCredit} cr</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {t.players?.length || 11} players · C: {t.captainName} · VC: {t.viceCaptainName}
+                  </p>
+                </button>
+              ))}
             </div>
           </ScrollArea>
         </CardContent>
