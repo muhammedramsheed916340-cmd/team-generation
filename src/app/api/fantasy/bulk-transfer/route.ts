@@ -7,22 +7,22 @@ const REAL_BACKEND = 'https://tgsoftware-api.online'
 
 /**
  * POST /api/fantasy/bulk-transfer
- * Body: { accountId, authToken, matchName, platform, mode, totalTeams, template }
+ * Body: { accountId, authToken, matchId, matchName, platform, mode, totalTeams, template }
  *
  * Proxies to teamgeneration.in's transfer API:
- *   Dream11: POST /api/dream11/addteam
- *   My11Circle: POST /api/my11circle/add-match
+ *   POST /api/classic/dream11/addteam (Dream11)
+ *   POST /api/classic/my11circle/addteam (My11Circle) — if exists
  *
- * teamgeneration.in expects:
- *   { matchId, captain, vice_captain, players, fantasyApp, authToken, sportIndex, type }
+ * teamgeneration.in expects EXACTLY:
+ *   {
+ *     tgMatchId: "<match_id>",
+ *     playerData: [<player_object>, ...],   // array of player objects
+ *     captainData: <player_object>,          // captain player object
+ *     vicecaptainData: <player_object>,      // VC player object
+ *     generateLinkFlag: "general"
+ *   }
  *
- * - captain: player ID (string)
- * - vice_captain: player ID (string)
- * - players: array of player IDs (strings)
- * - fantasyApp: "dream11" | "my11circle"
- * - authToken: from OTP verify response
- * - sportIndex: 0 (cricket)
- * - type: "new" for create, "edit" for replace
+ * player_object = { name, player_id, ... } from teamgeneration.in
  */
 export const POST = apiHandler(async (req: NextRequest) => {
   const auth = await authenticate(req)
@@ -31,8 +31,8 @@ export const POST = apiHandler(async (req: NextRequest) => {
   if (!rl.allowed) return fail('Too many bulk transfer requests', 429, 'RATE_LIMIT')
 
   const body = await parseBody<{
-    accountId: string; authToken?: string; matchName: string; platform?: string;
-    mode: string; totalTeams: number; template: any;
+    accountId: string; authToken?: string; matchId?: string; matchName: string;
+    platform?: string; mode: string; totalTeams: number; template: any;
   }>(req)
 
   if (!body.accountId || !body.matchName || !body.mode || !body.template) {
@@ -43,70 +43,86 @@ export const POST = apiHandler(async (req: NextRequest) => {
   }
 
   const t = body.template
-  const fantasyApp = (body.platform || 'DREAM11').toLowerCase()
+  const matchId = body.matchId || body.matchName
 
-  // If we have a real authToken from OTP verify, use real teamgeneration.in transfer
-  if (body.authToken) {
-    // Build the EXACT payload teamgeneration.in expects
-    const transferPayload = {
-      matchId: body.matchName, // match identifier
-      captain: String(t.captainExternalId), // player ID
-      vice_captain: String(t.viceCaptainExternalId), // player ID
-      players: t.players.map((p: any) => String(p.externalId)), // array of player IDs
-      fantasyApp,
-      authToken: body.authToken,
-      sportIndex: 0, // cricket
-      type: body.mode === 'REPLACE' || body.mode === 'REPLACE_SPECIFIC' ? 'edit' : 'new',
-    }
+  // Build player objects for the classic transfer API
+  // teamgeneration.in expects player objects, not just IDs
+  const playerData = t.players.map((p: any) => ({
+    player_id: p.externalId,
+    name: p.name,
+    role: p.role,
+  }))
 
-    const endpoint = fantasyApp === 'dream11' ? '/api/dream11/addteam' : '/api/my11circle/add-match'
-    console.log('[bulk-transfer] Sending to teamgeneration.in:', { endpoint, payload: JSON.stringify(transferPayload).slice(0, 300) })
+  const captainPlayer = t.players.find((p: any) => p.externalId === t.captainExternalId) || t.players[0]
+  const vcPlayer = t.players.find((p: any) => p.externalId === t.viceCaptainExternalId) || t.players[1]
 
-    let successCount = 0
-    let failedCount = 0
-    const errors: string[] = []
-
-    // Transfer each team (same template for all in bulk)
-    for (let i = 0; i < body.totalTeams; i++) {
-      try {
-        const res = await fetch(`${REAL_BACKEND}${endpoint}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify(transferPayload),
-          signal: AbortSignal.timeout(15000),
-        })
-
-        const text = await res.text()
-        console.log(`[bulk-transfer] Team ${i + 1} response:`, { status: res.status, body: text.slice(0, 200) })
-
-        let json: any
-        try { json = JSON.parse(text) } catch { json = { status: 'fail', message: 'Invalid response' } }
-
-        if (res.status === 200 && (json.status === 'success' || json.success === true)) {
-          successCount++
-        } else {
-          failedCount++
-          errors.push(json.message || `Team ${i + 1} failed`)
-        }
-      } catch (e: any) {
-        console.error(`[bulk-transfer] Team ${i + 1} error:`, e.message)
-        failedCount++
-        errors.push(e.message)
-      }
-    }
-
-    return ok({
-      queueId: `q-${Date.now()}`,
-      status: 'COMPLETED',
-      totalTeams: body.totalTeams,
-      successCount,
-      failedCount,
-      errors: errors.slice(0, 5), // Return first 5 errors
-      provider: 'teamgeneration.in',
-      endpoint,
-    }, 202)
+  const captainData = {
+    player_id: captainPlayer.externalId,
+    name: captainPlayer.name,
+    role: captainPlayer.role,
   }
 
-  // No authToken — can't transfer without linked account
-  return fail('No authToken. Link your fantasy account first via OTP.', 401, 'NO_AUTH_TOKEN')
+  const vicecaptainData = {
+    player_id: vcPlayer.externalId,
+    name: vcPlayer.name,
+    role: vcPlayer.role,
+  }
+
+  // Build EXACT payload matching teamgeneration.in's classic/dream11/addteam
+  const transferPayload = {
+    tgMatchId: String(matchId),
+    playerData,
+    captainData,
+    vicecaptainData,
+    generateLinkFlag: 'general',
+  }
+
+  const platform = (body.platform || 'DREAM11').toLowerCase()
+  const endpoint = `/api/classic/${platform}/addteam`
+
+  console.log('[bulk-transfer] Sending to teamgeneration.in:', { endpoint, payload: JSON.stringify(transferPayload).slice(0, 500) })
+
+  let successCount = 0
+  let failedCount = 0
+  const errors: string[] = []
+
+  // Transfer each team
+  for (let i = 0; i < body.totalTeams; i++) {
+    try {
+      const res = await fetch(`${REAL_BACKEND}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify(transferPayload),
+        signal: AbortSignal.timeout(15000),
+      })
+
+      const text = await res.text()
+      console.log(`[bulk-transfer] Team ${i + 1} response:`, { status: res.status, body: text.slice(0, 300) })
+
+      let json: any
+      try { json = JSON.parse(text) } catch { json = { status: 'fail', message: 'Invalid response' } }
+
+      if (res.status === 200 && (json.status === 'success' || json.success === true)) {
+        successCount++
+      } else {
+        failedCount++
+        errors.push(json.message || `Team ${i + 1} failed (HTTP ${res.status})`)
+      }
+    } catch (e: any) {
+      console.error(`[bulk-transfer] Team ${i + 1} error:`, e.message)
+      failedCount++
+      errors.push(e.message)
+    }
+  }
+
+  return ok({
+    queueId: `q-${Date.now()}`,
+    status: 'COMPLETED',
+    totalTeams: body.totalTeams,
+    successCount,
+    failedCount,
+    errors: errors.slice(0, 5),
+    provider: 'teamgeneration.in',
+    endpoint,
+  }, 202)
 })
