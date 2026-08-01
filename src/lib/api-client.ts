@@ -132,8 +132,8 @@ export const testApi = {
 
 // Fantasy Transfer
 export const fantasyApi = {
-  login: (platform: string, mobile: string) => api.post<{ requestId: string; message: string; retriesLeft: number; resendsLeft: number; state: string; reasonCode: number | null }>('/api/fantasy/login', { platform, mobile }),
-  verify: (platform: string, mobile: string, otp: string, state: string, reasonCode?: number | null) => api.post<{ account: any; sessionId: string; expiresAt: string }>('/api/fantasy/verify', { platform, mobile, otp, state, reasonCode }),
+  login: (platform: string, mobile: string) => api.post<{ requestId: string; message: string; retriesLeft: number; resendsLeft: number; state: string | null; reasonCode: number | null; rawData: any }>('/api/fantasy/login', { platform, mobile }),
+  verify: (platform: string, mobile: string, otp: string, state: string, reasonCode?: number | null) => api.post<{ account: any; sessionId: string; authToken: string; expiresAt: string }>('/api/fantasy/verify', { platform, mobile, otp, state, reasonCode }),
   logout: (accountId: string) => api.post('/api/fantasy/logout', { accountId }),
   accounts: () => api.get<{ accounts: any[] }>('/api/fantasy/accounts'),
   createTeam: (accountId: string, matchName: string, template: any) => api.post<{ transfer: any; result: any }>('/api/fantasy/create-team', { accountId, matchName, template }),

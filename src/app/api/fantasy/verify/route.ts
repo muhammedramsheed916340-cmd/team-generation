@@ -5,21 +5,15 @@ import { rateLimitByIp, FANTASY_LIMITS } from '@/lib/rate-limit'
 
 const REAL_BACKEND = 'https://tgsoftware-api.online'
 
-// In-memory account store (works within same instance; for cross-instance
-// persistence, use a database — but for demo this is sufficient since
-// accounts are checked immediately after linking)
 export const accountsStore = new Map<string, any[]>()
 
 /**
  * POST /api/fantasy/verify
  * Body: { platform, mobile, otp, state, reasonCode }
  *
- * The state/reasonCode come from the send-otp response (passed through
- * the frontend). This is necessary because Vercel serverless doesn't
- * share in-memory state between requests.
- *
- * teamgeneration.in verify-otp expects:
- *   { fantasyApp, mobileNumber, verificationCode, state }        // Dream11
+ * Proxies to teamgeneration.in verify-otp API.
+ * teamgeneration.in expects:
+ *   { fantasyApp, mobileNumber, verificationCode, state }  // Dream11
  *   { fantasyApp, mobileNumber, verificationCode, challenge, reasonCode }  // My11Circle
  */
 export const POST = apiHandler(async (req: NextRequest) => {
@@ -38,44 +32,50 @@ export const POST = apiHandler(async (req: NextRequest) => {
 
   const fantasyApp = platform === 'DREAM11' ? 'dream11' : 'my11circle'
 
+  // Build EXACT payload matching teamgeneration.in's frontend
+  const verifyBody: any = {
+    fantasyApp,
+    mobileNumber: mobile,
+    verificationCode: otp,
+  }
+
+  if (fantasyApp === 'dream11') {
+    verifyBody.state = state
+  } else {
+    verifyBody.challenge = state
+    if (reasonCode) verifyBody.reasonCode = reasonCode
+  }
+
   try {
-    // Build verify payload matching teamgeneration.in's EXACT format
-    const verifyBody: any = {
-      fantasyApp,
-      mobileNumber: mobile,
-      verificationCode: otp,  // teamgeneration.in uses 'verificationCode', NOT 'otp'
-    }
-
-    if (fantasyApp === 'dream11') {
-      verifyBody.state = state
-    } else {
-      // My11Circle uses challenge + reasonCode
-      verifyBody.challenge = state
-      if (reasonCode) verifyBody.reasonCode = reasonCode
-    }
-
-    console.log('[verify-otp] Sending to teamgeneration.in:', { fantasyApp, mobileNumber: mobile, hasState: !!verifyBody.state, hasChallenge: !!verifyBody.challenge })
+    const bodyStr = JSON.stringify(verifyBody)
+    console.log('[verify-otp] Request:', { url: `${REAL_BACKEND}/api/fantasy/verify-otp`, body: bodyStr })
 
     const res = await fetch(`${REAL_BACKEND}/api/fantasy/verify-otp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'TeamGen/1.0' },
-      body: JSON.stringify(verifyBody),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body: bodyStr,
       signal: AbortSignal.timeout(15000),
     })
 
-    const json = await res.json()
+    const text = await res.text()
+    console.log('[verify-otp] Raw response:', { status: res.status, body: text.slice(0, 1000) })
 
-    console.log('[verify-otp] Response:', { status: res.status, apiStatus: json.status, message: json.message })
+    let json: any
+    try { json = JSON.parse(text) } catch { return fail('Invalid response from provider', 502, 'PROVIDER_ERROR') }
 
     if (res.status !== 200 || json.status !== 'success') {
+      // Return the ACTUAL error from teamgeneration.in (not hidden)
       const errorMsg = json.message || json.error || 'OTP verification failed'
       return fail(errorMsg, 401, 'INVALID_OTP')
     }
 
-    // OTP verified successfully — extract authToken
+    // Success — extract authToken from response
     const authToken = json.data?.authToken || json.data?.token || json.data?.access_token || `token-${Date.now()}`
+    const refreshToken = json.data?.refreshToken || json.data?.refresh_token || null
 
-    // Create account
     const accountId = `acc-${fantasyApp}-${mobile.slice(-4)}-${Date.now().toString(36)}`
     const displayName = `${platform} User ${mobile.slice(-4)}`
 
@@ -88,6 +88,7 @@ export const POST = apiHandler(async (req: NextRequest) => {
       status: 'ACTIVE',
       isActive: true,
       authToken,
+      refreshToken,
       lastVerifiedAt: new Date(),
       createdAt: new Date(),
       _count: { transfers: 0, queueItems: 0 },

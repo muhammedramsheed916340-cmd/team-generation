@@ -7,10 +7,8 @@ const REAL_BACKEND = 'https://tgsoftware-api.online'
 
 /**
  * POST /api/fantasy/login
- * Body: { platform: 'DREAM11'|'MY11CIRCLE', mobile: string }
- * Proxies to the REAL teamgeneration.in send-otp API.
- * Returns the state/challenge to the frontend (needed for verify-otp).
- * NO caching — state is passed back from the frontend.
+ * Proxies to teamgeneration.in send-otp API.
+ * Returns state/challenge in response (frontend passes it back for verify).
  */
 export const POST = apiHandler(async (req: NextRequest) => {
   const auth = await authenticate(req)
@@ -27,35 +25,42 @@ export const POST = apiHandler(async (req: NextRequest) => {
   const fantasyApp = platform === 'DREAM11' ? 'dream11' : 'my11circle'
 
   try {
+    const body = JSON.stringify({ fantasyApp, mobileNumber: mobile })
+    console.log('[send-otp] Request:', { url: `${REAL_BACKEND}/api/fantasy/send-otp`, body })
+
     const res = await fetch(`${REAL_BACKEND}/api/fantasy/send-otp`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'User-Agent': 'TeamGen/1.0' },
-      body: JSON.stringify({ fantasyApp, mobileNumber: mobile }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      body,
       signal: AbortSignal.timeout(15000),
     })
 
-    const json = await res.json()
+    const text = await res.text()
+    console.log('[send-otp] Raw response:', { status: res.status, body: text.slice(0, 500) })
+
+    let json: any
+    try { json = JSON.parse(text) } catch { return fail('Invalid response from provider', 502, 'PROVIDER_ERROR') }
 
     if (res.status !== 200 || json.status !== 'success') {
       return fail(json.message || 'OTP send failed', 502, 'OTP_SEND_FAILED')
     }
 
-    // Return state/challenge to frontend — frontend will pass it back in verify-otp
-    // This is necessary because Vercel serverless doesn't share in-memory state
-    // between requests (each request may run on a different instance).
-    const state = json.data?.state || json.data?.challenge || null
-    const reasonCode = json.data?.reasonCode || null
-
+    // Return ALL data from provider response
     return ok({
       requestId: `otp-${platform}-${mobile}-${Date.now()}`,
       message: `OTP sent to +91 ${mobile} via SMS`,
       retriesLeft: json.data?.retries_left || 5,
       resendsLeft: json.data?.resends_left || 5,
-      // State is passed to frontend and sent back with verify-otp
-      state,
-      reasonCode,
+      state: json.data?.state || json.data?.challenge || null,
+      reasonCode: json.data?.reasonCode || null,
+      // Return raw provider data for debugging
+      rawData: json.data,
     })
   } catch (e: any) {
+    console.error('[send-otp] Error:', e.message)
     return fail(`Failed to send OTP: ${e.message}`, 502, 'OTP_PROVIDER_ERROR')
   }
 })
