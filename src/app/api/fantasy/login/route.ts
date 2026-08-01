@@ -43,8 +43,14 @@ export const POST = apiHandler(async (req: NextRequest) => {
 
     // Store the state/challenge for verification
     const state = json.data?.state || json.data?.challenge || null
+    const reasonCode = json.data?.reasonCode || null
     const cacheKey = `otp-state:${auth.user.id}:${platform}:${mobile}`
-    cache.set(cacheKey, { state, retriesLeft: json.data?.retries_left || 5, resendsLeft: json.data?.resends_left || 5, sentAt: Date.now() }, 5 * 60 * 1000)
+    cache.set(cacheKey, {
+      state, reasonCode,
+      retriesLeft: json.data?.retries_left || 5,
+      resendsLeft: json.data?.resends_left || 5,
+      sentAt: Date.now()
+    }, 5 * 60 * 1000)
 
     return ok({
       requestId: cacheKey,
