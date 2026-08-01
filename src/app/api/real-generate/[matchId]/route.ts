@@ -45,52 +45,59 @@ function decrypt(enc: any): any {
 }
 
 async function fetchRealMatch(matchId: string) {
-  const res = await fetch(`${REAL_BACKEND}/api/fantasy/match/${matchId}`, {
-    headers: { 'Accept': 'application/json', 'User-Agent': 'TeamGen/1.0' },
-    signal: AbortSignal.timeout(10000),
-  })
-  if (!res.ok) throw new Error(`Backend returned ${res.status}`)
-  const json = await res.json()
-  if (json.status !== 'success' || !json.data) return null
+  try {
+    const res = await fetch(`${REAL_BACKEND}/api/fantasy/match/${matchId}`, {
+      headers: { 'Accept': 'application/json', 'User-Agent': 'TeamGen/1.0' },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) return null
+    const json = await res.json()
+    if (json.status !== 'success' || !json.data) return null
 
-  const m = json.data
-  const team1 = decrypt(m.left_team_name)
-  const team2 = decrypt(m.right_team_name)
-  const team1Image = decrypt(m.left_team_image)
-  const team2Image = decrypt(m.right_team_image)
-  const lineupOut = m.lineup_status === 1 || m.lineup_status === true
+    const m = json.data
+    if (!m.left_team_name || !m.right_team_name) return null
+    const team1 = decrypt(m.left_team_name)
+    const team2 = decrypt(m.right_team_name)
+    const team1Image = decrypt(m.left_team_image)
+    const team2Image = decrypt(m.right_team_image)
+    const lineupOut = m.lineup_status === 1 || m.lineup_status === true
 
-  const parsePlayers = (arr: any[], teamName: string): RealPlayer[] => {
-    return arr.map((enc, i) => {
-      const p = decrypt(enc)
-      if (!p || typeof p !== 'object') return null
-      return {
-        id: p.player_fixed_id || p.pl_id || i,
-        name: p.name,
-        image: p.image,
-        team: teamName,
-        role: ROLE_MAP[p.role] || 'BAT',
-        credits: p.credits,
-        points: p.points || 0,
-        selectedBy: p.selected_by || 0,
-        playing: p.playing === 1 || p.playing === true,
-        captainPct: p.captain_percentage || 0,
-        vcPct: p.vice_captain_percentage || 0,
-        playerType: p.player_type || 'unknown',
-      }
-    }).filter(Boolean) as RealPlayer[]
-  }
+    const parsePlayers = (arr: any[], teamName: string): RealPlayer[] => {
+      if (!Array.isArray(arr)) return []
+      return arr.map((enc, i) => {
+        const p = decrypt(enc)
+        if (!p || typeof p !== 'object') return null
+        return {
+          id: p.player_fixed_id || p.pl_id || i,
+          name: p.name,
+          image: p.image,
+          team: teamName,
+          role: ROLE_MAP[p.role] || 'BAT',
+          credits: p.credits,
+          points: p.points || 0,
+          selectedBy: p.selected_by || 0,
+          playing: p.playing === 1 || p.playing === true,
+          captainPct: p.captain_percentage || 0,
+          vcPct: p.vice_captain_percentage || 0,
+          playerType: p.player_type || 'unknown',
+        }
+      }).filter(Boolean) as RealPlayer[]
+    }
 
-  const team1Players = parsePlayers(m.left_team_players || [], team1)
-  const team2Players = parsePlayers(m.right_team_players || [], team2)
+    const team1Players = parsePlayers(m.left_team_players || [], team1)
+    const team2Players = parsePlayers(m.right_team_players || [], team2)
 
-  return {
-    matchId,
-    team1, team2, team1Image, team2Image,
-    lineupOut,
-    toss: decrypt(m.toss),
-    matchTime: m.match_time,
-    players: { team1: team1Players, team2: team2Players },
+    return {
+      matchId,
+      team1, team2, team1Image, team2Image,
+      lineupOut,
+      toss: decrypt(m.toss),
+      matchTime: m.match_time,
+      players: { team1: team1Players, team2: team2Players },
+    }
+  } catch (e) {
+    console.error('fetchRealMatch error:', e)
+    return null
   }
 }
 
@@ -315,15 +322,22 @@ export const POST = apiHandler(async (req: NextRequest, { params }) => {
   const strategy = body.strategy || 'GL'
   const count = Math.min(Math.max(1, body.count || 5), 20)
 
-  // Fetch real match data (cached)
+  // Fetch real match data (cached, but skip cache on failure)
   const cacheKey = `real-match:${matchId}`
-  const matchData = await cache.getOrSet(cacheKey, async () => {
+  let matchData = await cache.getOrSet(cacheKey, async () => {
     return await fetchRealMatch(matchId)
-  }, 60 * 1000)
+  }, 60 * 1000).catch(() => null)
 
-  if (!matchData) return fail('Match not found on teamgeneration.in', 404, 'NOT_FOUND')
+  // If cached value is null, try fetching again without cache
+  if (!matchData || !matchData.players || !matchData.players.team1) {
+    cache.delete(cacheKey)
+    matchData = await fetchRealMatch(matchId)
+  }
 
-  const allPlayers = [...matchData.players.team1, ...matchData.players.team2]
+  if (!matchData || !matchData.players) return fail('Match data not available from teamgeneration.in', 503, 'BACKEND_ERROR')
+
+  const allPlayers = [...(matchData.players.team1 || []), ...(matchData.players.team2 || [])]
+  if (allPlayers.length < 11) return fail('Not enough players to generate teams', 400, 'INSUFFICIENT_PLAYERS')
 
   // Generate unique teams
   const teams: GeneratedTeam[] = []
