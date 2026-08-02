@@ -12,14 +12,21 @@ const REAL_BACKEND = 'https://tgsoftware-api.online'
  *   POST /api/classic/dream11/addteam
  *   POST /api/classic/my11circle/addteam
  *
- * EXACT payload (from teamgeneration.in JS analysis):
+ * teamgeneration.in returns a LINK that pre-fills the team on Dream11.
+ * The user clicks the link to complete the transfer on Dream11.
+ *
+ * Payload (from JS analysis):
  *   {
- *     tgMatchId: "<match_id>",              // string
+ *     tgMatchId: "<match_id>",
  *     playerData: ["<pl_id>", "<pl_id>", ...],  // array of player ID strings
- *     captainData: "<pl_id>",               // captain player ID string
- *     vicecaptainData: "<pl_id>",           // VC player ID string
+ *     captainData: "<pl_id>",                   // captain pl_id string
+ *     vicecaptainData: "<pl_id>",               // VC pl_id string
  *     generateLinkFlag: "general"
  *   }
+ *
+ * Response from teamgeneration.in:
+ *   { status: "success", data: "<encrypted_link_data>" }
+ *   The link is extracted and returned to the frontend.
  */
 export const POST = apiHandler(async (req: NextRequest) => {
   const auth = await authenticate(req)
@@ -42,10 +49,8 @@ export const POST = apiHandler(async (req: NextRequest) => {
   const t = body.template
   const matchId = body.matchId || body.matchName
 
-  // Build playerData: array of pl_id strings (player IDs as strings)
+  // Build playerData: array of pl_id strings
   const playerData = t.players.map((p: any) => String(p.externalId))
-
-  // captainData and vicecaptainData are pl_id strings
   const captainData = String(t.captainExternalId)
   const vicecaptainData = String(t.viceCaptainExternalId)
 
@@ -61,11 +66,12 @@ export const POST = apiHandler(async (req: NextRequest) => {
   const platform = (body.platform || 'DREAM11').toLowerCase()
   const endpoint = `/api/classic/${platform}/addteam`
 
-  console.log('[bulk-transfer] Sending to teamgeneration.in:', { endpoint, payload: JSON.stringify(transferPayload) })
+  console.log('[bulk-transfer] Sending to teamgeneration.in:', { endpoint, payload: JSON.stringify(transferPayload).slice(0, 500) })
 
   let successCount = 0
   let failedCount = 0
   const errors: string[] = []
+  const transferLinks: string[] = []
 
   for (let i = 0; i < body.totalTeams; i++) {
     try {
@@ -77,13 +83,24 @@ export const POST = apiHandler(async (req: NextRequest) => {
       })
 
       const text = await res.text()
-      console.log(`[bulk-transfer] Team ${i + 1} response:`, { status: res.status, body: text.slice(0, 300) })
+      console.log(`[bulk-transfer] Team ${i + 1} response:`, { status: res.status, body: text.slice(0, 500) })
 
       let json: any
       try { json = JSON.parse(text) } catch { json = { status: 'fail', message: 'Invalid response' } }
 
       if (res.status === 200 && (json.status === 'success' || json.success === true)) {
         successCount++
+        // Extract the transfer link from the response
+        // teamgeneration.in returns encrypted link data in json.data
+        if (json.data) {
+          if (typeof json.data === 'string') {
+            transferLinks.push(json.data)
+          } else if (json.data.link) {
+            transferLinks.push(json.data.link)
+          } else if (json.data.url) {
+            transferLinks.push(json.data.url)
+          }
+        }
       } else {
         failedCount++
         errors.push(json.message || `Team ${i + 1} failed (HTTP ${res.status})`)
@@ -102,6 +119,7 @@ export const POST = apiHandler(async (req: NextRequest) => {
     successCount,
     failedCount,
     errors: errors.slice(0, 5),
+    transferLinks,
     provider: 'teamgeneration.in',
     endpoint,
   }, 202)

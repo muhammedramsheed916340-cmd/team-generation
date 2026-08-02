@@ -82,7 +82,15 @@ export function GeneratorTab() {
       if (res.failedCount > 0 && res.successCount === 0) {
         toast.error(`Transfer failed: ${res.errors?.[0] || 'Unknown error'}`)
       } else {
-        toast.success(`Team transferred! ${res.successCount} success, ${res.failedCount} failed`)
+        // If transfer links returned, open them
+        if (res.transferLinks && res.transferLinks.length > 0) {
+          res.transferLinks.forEach((link: string) => {
+            window.open(link, '_blank')
+          })
+          toast.success(`Transfer link opened! ${res.successCount} team(s) ready on Dream11`)
+        } else {
+          toast.success(`Team transferred! ${res.successCount} success, ${res.failedCount} failed`)
+        }
       }
     } catch (e: any) {
       toast.error('Transfer failed: ' + e.message)
