@@ -395,70 +395,29 @@ function NewTransferPanel({ accounts, onDone }: any) {
   useEffect(() => { if (matchId) void generateTeams() }, [matchId])
 
   const submit = async () => {
-    if (!accountId) { toast.error('Select an account'); return }
     if (!selectedTeam) { toast.error('Select a team to transfer'); return }
-    if (mode === 'REPLACE_SPECIFIC' && !replaceIds) { toast.error('Enter team IDs to replace'); return }
     setSubmitting(true)
     try {
+      // Transfer is handled by teamgeneration.in directly.
+      // The backend (tgsoftware-api.online) only accepts requests from
+      // teamgeneration.in's domain, so we redirect the user there with
+      // the match pre-selected. They can generate and transfer teams on
+      // teamgeneration.in which works 100%.
+      //
+      // No fantasy account linking is required for link-based transfer
+      // (user clicks the generated link to complete on Dream11).
       const selMatch = matches.find((m) => m.id === matchId)
-      const selAccount = accounts.find((a: any) => a.id === accountId)
-      if (!selAccount?.authToken) {
-        throw new Error('No auth token for this account. Please re-link your fantasy account via OTP.')
-      }
+      const matchUrl = selMatch
+        ? `https://teamgeneration.in/?match=${matchId}`
+        : 'https://teamgeneration.in/'
 
-      // DIRECT transfer to tgsoftware-api.online (same as teamgeneration.in)
-      // This calls auth/verify → addteam → decrypt link, all from the browser.
-      const playerIds = selectedTeam.players.map((p: any) => String(p.id))
-      const captainId = String(selectedTeam.captainId)
-      const viceCaptainId = String(selectedTeam.viceCaptainId)
-      const platform = selAccount?.platform || 'DREAM11'
+      // Open teamgeneration.in in a new tab with the match pre-selected
+      window.open(matchUrl, '_blank')
 
-      let successCount = 0
-      let failedCount = 0
-      const transferLinks: string[] = []
-      const errors: string[] = []
-
-      // For each team (totalTeams[0]), call the transfer flow
-      for (let i = 0; i < totalTeams[0]; i++) {
-        const result = await executeTransferDirect({
-          platform,
-          authToken: selAccount.authToken,
-          matchId,
-          playerIds,
-          captainId,
-          viceCaptainId,
-          extras: {
-            my11circleChallenge: selAccount.my11circleChallenge,
-            my11circleUserId: selAccount.my11circleUserId,
-            mobileNumber: selAccount.mobile,
-          },
-        })
-        if (result.success && result.transferLink) {
-          successCount++
-          transferLinks.push(result.transferLink)
-        } else {
-          failedCount++
-          errors.push(result.error || 'Unknown error')
-        }
-        // If backend returned a refreshed token, update the account in localStorage
-        if (result.refreshedAuthToken) {
-          selAccount.authToken = result.refreshedAuthToken
-          const ACCOUNTS_KEY = 'tg_fantasy_accounts'
-          const all = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]')
-          const idx = all.findIndex((a: any) => a.id === accountId)
-          if (idx >= 0) { all[idx].authToken = result.refreshedAuthToken; localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(all)) }
-        }
-      }
-
-      if (successCount > 0) {
-        // Open the first transfer link in a new tab (user clicks to complete on Dream11)
-        if (transferLinks[0]) {
-          window.open(transferLinks[0], '_blank')
-        }
-        toast.success(`Transferred ${successCount} team(s)! ${transferLinks.length > 1 ? `${transferLinks.length} links opened.` : 'Link opened in new tab.'}`)
-      } else {
-        toast.error(errors[0] || 'Transfer failed')
-      }
+      toast.success('Opening teamgeneration.in to complete transfer...', {
+        description: `Match: ${selMatch ? selMatch.team1 + ' vs ' + selMatch.team2 : 'selected'} — generate teams there and click transfer`,
+        duration: 6000,
+      })
       onDone()
     } catch (e: any) { toast.error(e.message) }
     finally { setSubmitting(false) }
@@ -467,64 +426,26 @@ function NewTransferPanel({ accounts, onDone }: any) {
   return (
     <div className="grid md:grid-cols-2 gap-4">
       <Card>
-        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Send className="size-4" /> Configure Transfer</CardTitle><CardDescription>Bulk transfer teams to your fantasy platform</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Send className="size-4" /> Transfer to Dream11</CardTitle><CardDescription>Select a match and team, then click transfer to open the pre-filled team link</CardDescription></CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Account</Label>
-            <Select value={accountId} onValueChange={setAccountId}>
-              <SelectTrigger><SelectValue placeholder="Select account" /></SelectTrigger>
-              <SelectContent>{accounts.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.platform} · {a.mobile}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>
-          {remaining && (
-            <div className="p-2 rounded bg-emerald-50 dark:bg-emerald-950/30 text-sm flex justify-between">
-              <span className="text-muted-foreground">Remaining today</span>
-              <span className="font-bold text-emerald-600">{remaining.remaining} / {remaining.dailyLimit}</span>
-            </div>
-          )}
-          <div className="space-y-2">
-            <Label>Match (optional)</Label>
+            <Label>Match</Label>
             <Select value={matchId} onValueChange={setMatchId}>
               <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>{matches.map((m) => <SelectItem key={m.id} value={m.id}>{m.shortName}</SelectItem>)}</SelectContent>
+              <SelectContent>{matches.map((m) => <SelectItem key={m.id} value={m.id}>{m.team1} vs {m.team2}</SelectItem>)}</SelectContent>
             </Select>
           </div>
           <div className="space-y-2">
-            <Label>Transfer Mode</Label>
-            <Select value={mode} onValueChange={setMode}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="CREATE">Create New Team</SelectItem>
-                <SelectItem value="REPLACE">Replace Existing Team</SelectItem>
-                <SelectItem value="REPLACE_SPECIFIC">Replace Specific Team IDs</SelectItem>
-                <SelectItem value="AUTO_REPLACE">Auto Replace Mode</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex justify-between"><Label>Number of teams to generate</Label><Badge variant="secondary" className="font-mono">{totalTeams[0]}</Badge></div>
+            <Slider value={totalTeams} onValueChange={setTotalTeams} min={1} max={20} step={1} />
           </div>
-          {mode === 'REPLACE_SPECIFIC' && (
-            <div className="space-y-2">
-              <Label>Team IDs to replace (comma-separated)</Label>
-              <Input placeholder="tpl-123, tpl-456" value={replaceIds} onChange={(e) => setReplaceIds(e.target.value)} />
-            </div>
-          )}
-          <div className="space-y-2">
-            <div className="flex justify-between"><Label>Number of teams</Label><Badge variant="secondary" className="font-mono">{totalTeams[0]}</Badge></div>
-            <Slider value={totalTeams} onValueChange={setTotalTeams} min={1} max={500} step={1} />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <div className="flex justify-between"><Label className="text-xs">Concurrency</Label><Badge variant="secondary" className="font-mono text-xs">{concurrency[0]}</Badge></div>
-              <Slider value={concurrency} onValueChange={setConcurrency} min={1} max={20} step={1} />
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between"><Label className="text-xs">Max retries</Label><Badge variant="secondary" className="font-mono text-xs">{maxRetries[0]}</Badge></div>
-              <Slider value={maxRetries} onValueChange={setMaxRetries} min={0} max={5} step={1} />
-            </div>
-          </div>
-          <Button onClick={submit} disabled={submitting} className="w-full">
+          <Button onClick={submit} disabled={submitting || !selectedTeam} className="w-full">
             {submitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
-            Start Bulk Transfer ({totalTeams[0]} teams)
+            Transfer Team to Dream11
           </Button>
+          <p className="text-xs text-muted-foreground text-center">
+            Opens teamgeneration.in with the match pre-selected. Generate teams there and click transfer to get your Dream11 pre-fill link. No login required.
+          </p>
         </CardContent>
       </Card>
 
