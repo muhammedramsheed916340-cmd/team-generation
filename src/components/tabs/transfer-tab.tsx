@@ -407,15 +407,16 @@ function NewTransferPanel({ accounts, onDone }: any) {
       // No fantasy account linking is required for link-based transfer
       // (user clicks the generated link to complete on Dream11).
       const selMatch = matches.find((m) => m.id === matchId)
+      // teamgeneration.in uses /match/:id route for match pages
       const matchUrl = selMatch
-        ? `https://teamgeneration.in/?match=${matchId}`
+        ? `https://teamgeneration.in/match/${matchId}`
         : 'https://teamgeneration.in/'
 
       // Open teamgeneration.in in a new tab with the match pre-selected
       window.open(matchUrl, '_blank')
 
-      toast.success('Opening teamgeneration.in to complete transfer...', {
-        description: `Match: ${selMatch ? selMatch.team1 + ' vs ' + selMatch.team2 : 'selected'} — generate teams there and click transfer`,
+      toast.success('Opening match on teamgeneration.in...', {
+        description: `Match: ${selMatch ? selMatch.team1 + ' vs ' + selMatch.team2 : 'selected'} — generate teams and click transfer there`,
         duration: 6000,
       })
       onDone()
