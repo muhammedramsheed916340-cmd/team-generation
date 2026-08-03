@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { InputOTP, InputOTPGroup, InputOTPSlot } from '@/components/ui/input-otp'
 import { Send, Plus, Loader2, Smartphone, ShieldCheck, RefreshCw, CheckCircle2, XCircle, Clock, Zap, History, Play, RotateCcw, Link2, Unlink, Activity } from 'lucide-react'
 import { fantasyApi, realApi } from '@/lib/api-client'
+import { sendOtp as directSendOtp, verifyOtp as directVerifyOtp, executeTransferDirect } from '@/lib/direct-backend'
 import { useJobsSocket } from '@/hooks/use-jobs-socket'
 import { toast } from 'sonner'
 
@@ -261,10 +262,12 @@ function OtpLoginDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
     if (!/^\d{10}$/.test(mobile)) { toast.error('Enter a valid 10-digit mobile'); return }
     setLoading(true)
     try {
-      const res = await fantasyApi.login(platform, mobile)
-      setResendsLeft(res.resendsLeft || 5)
-      setOtpState(res.state || '')
-      setReasonCode(res.reasonCode || null)
+      // DIRECT to tgsoftware-api.online (same as teamgeneration.in)
+      // Server-side proxy was causing transfer failures.
+      const res = await directSendOtp(platform, mobile)
+      setResendsLeft(res.data?.resends_left || 5)
+      setOtpState(res.data?.state || '')
+      setReasonCode(null)
       setStep('verify')
       toast.success(`OTP sent to +91 ${mobile} via SMS`, { description: 'Check your phone for the OTP' })
     } catch (e: any) { toast.error(e.message) }
@@ -276,11 +279,30 @@ function OtpLoginDialog({ onClose, onSuccess }: { onClose: () => void; onSuccess
     if (!otpState) { toast.error('Session expired. Request a new OTP.'); setStep('request'); return }
     setLoading(true)
     try {
-      const res = await fantasyApi.verify(platform, mobile, otp, otpState, reasonCode)
-      // Store account in localStorage (works on Vercel — no server memory needed)
+      // DIRECT to tgsoftware-api.online (same as teamgeneration.in)
+      const res = await directVerifyOtp(platform, mobile, otp, otpState, reasonCode)
+      const authToken = res.data?.token || ''
+      if (!authToken) { throw new Error('No auth token received') }
+      // Store account in localStorage with the real authToken
       const ACCOUNTS_KEY = 'tg_fantasy_accounts'
       const existing = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]')
-      existing.push(res.account)
+      const accountId = `acc-${platform}-${mobile.slice(-4)}-${Date.now().toString(36)}`
+      existing.push({
+        id: accountId,
+        platform,
+        mobile,
+        displayName: `${platform === 'DREAM11' ? 'Dream11' : 'My11Circle'} ${mobile.slice(-4)}`,
+        status: 'ACTIVE',
+        isActive: true,
+        authToken,
+        my11circleChallenge: res.data?.my11circleChallenge || null,
+        my11circleUserId: res.data?.my11circleUserId || null,
+        sessionActive: true,
+        sessionExpiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        lastVerifiedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        _count: { transfers: 0, queueItems: 0 },
+      })
       localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(existing))
       toast.success('Account linked successfully!')
       onSuccess()
@@ -378,25 +400,65 @@ function NewTransferPanel({ accounts, onDone }: any) {
     if (mode === 'REPLACE_SPECIFIC' && !replaceIds) { toast.error('Enter team IDs to replace'); return }
     setSubmitting(true)
     try {
-      const template = {
-        players: selectedTeam.players.map((p: any) => ({ externalId: String(p.id), name: p.name, role: p.role })),
-        captainExternalId: String(selectedTeam.captainId),
-        viceCaptainExternalId: String(selectedTeam.viceCaptainId),
-        captainName: selectedTeam.captainName,
-        viceCaptainName: selectedTeam.viceCaptainName,
-      }
       const selMatch = matches.find((m) => m.id === matchId)
-      // Get authToken from the selected account (stored in localStorage)
       const selAccount = accounts.find((a: any) => a.id === accountId)
-      const res = await fantasyApi.bulkTransfer({
-        accountId, authToken: selAccount?.authToken, matchId,
-        matchName: selMatch ? `${selMatch.team1} vs ${selMatch.team2}` : 'Custom',
-        mode: 'CREATE',
-        totalTeams: totalTeams[0],
-        platform: selAccount?.platform || 'DREAM11',
-        template,
-      })
-      toast.success(`Transferred ${res.totalTeams} teams! (${res.successCount || 0} success, ${res.failedCount || 0} failed)`)
+      if (!selAccount?.authToken) {
+        throw new Error('No auth token for this account. Please re-link your fantasy account via OTP.')
+      }
+
+      // DIRECT transfer to tgsoftware-api.online (same as teamgeneration.in)
+      // This calls auth/verify → addteam → decrypt link, all from the browser.
+      const playerIds = selectedTeam.players.map((p: any) => String(p.id))
+      const captainId = String(selectedTeam.captainId)
+      const viceCaptainId = String(selectedTeam.viceCaptainId)
+      const platform = selAccount?.platform || 'DREAM11'
+
+      let successCount = 0
+      let failedCount = 0
+      const transferLinks: string[] = []
+      const errors: string[] = []
+
+      // For each team (totalTeams[0]), call the transfer flow
+      for (let i = 0; i < totalTeams[0]; i++) {
+        const result = await executeTransferDirect({
+          platform,
+          authToken: selAccount.authToken,
+          matchId,
+          playerIds,
+          captainId,
+          viceCaptainId,
+          extras: {
+            my11circleChallenge: selAccount.my11circleChallenge,
+            my11circleUserId: selAccount.my11circleUserId,
+            mobileNumber: selAccount.mobile,
+          },
+        })
+        if (result.success && result.transferLink) {
+          successCount++
+          transferLinks.push(result.transferLink)
+        } else {
+          failedCount++
+          errors.push(result.error || 'Unknown error')
+        }
+        // If backend returned a refreshed token, update the account in localStorage
+        if (result.refreshedAuthToken) {
+          selAccount.authToken = result.refreshedAuthToken
+          const ACCOUNTS_KEY = 'tg_fantasy_accounts'
+          const all = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]')
+          const idx = all.findIndex((a: any) => a.id === accountId)
+          if (idx >= 0) { all[idx].authToken = result.refreshedAuthToken; localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(all)) }
+        }
+      }
+
+      if (successCount > 0) {
+        // Open the first transfer link in a new tab (user clicks to complete on Dream11)
+        if (transferLinks[0]) {
+          window.open(transferLinks[0], '_blank')
+        }
+        toast.success(`Transferred ${successCount} team(s)! ${transferLinks.length > 1 ? `${transferLinks.length} links opened.` : 'Link opened in new tab.'}`)
+      } else {
+        toast.error(errors[0] || 'Transfer failed')
+      }
       onDone()
     } catch (e: any) { toast.error(e.message) }
     finally { setSubmitting(false) }
