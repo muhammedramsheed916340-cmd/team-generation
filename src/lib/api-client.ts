@@ -26,7 +26,7 @@ export function clearToken() {
   localStorage.removeItem(USER_KEY)
 }
 
-export function getStoredUser(): { id: string; email: string; name: string; role: string; credits: number } | null {
+export function getStoredUser(): { id: string; email: string; name: string; role: string; credits: number; isPremium?: boolean; plan?: string } | null {
   if (typeof window === 'undefined') return null
   const raw = localStorage.getItem(USER_KEY)
   return raw ? JSON.parse(raw) : null

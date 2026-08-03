@@ -12,6 +12,10 @@ interface AuthUser {
   name: string
   role: string
   credits: number
+  // TEMP BYPASS — isPremium & plan fields added when premium was bypassed.
+  // Revert (remove these two fields) when Dream11/My11Circle stop being free.
+  isPremium: boolean
+  plan: string
 }
 
 interface AuthCtx {

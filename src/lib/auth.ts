@@ -12,7 +12,7 @@ import { NextRequest } from 'next/server'
 import { verifyAccessToken, extractBearer, AccessPayload } from '@/lib/jwt'
 
 export interface AuthResult {
-  user: { id: string; email: string; name: string; role: string; credits: number }
+  user: { id: string; email: string; name: string; role: string; credits: number; isPremium: boolean; plan: string }
   payload: AccessPayload
 }
 
@@ -25,8 +25,22 @@ export async function authenticate(req: NextRequest): Promise<AuthResult | null>
   if (!token) return null
   const payload = verifyAccessToken(token)
   if (!payload) return null
+  // ============================================================
+  // TEMP BYPASS — Dream11 & My11Circle are now free, so Team
+  // Generation is also free temporarily. Revert this block when
+  // fantasy platforms stop being free (estimated 2-3 months).
+  // ORIGINAL: credits: 100 (no isPremium / plan fields)
+  // ============================================================
   return {
-    user: { id: payload.userId, email: payload.email, name: 'User', role: payload.role, credits: 100 },
+    user: {
+      id: payload.userId,
+      email: payload.email,
+      name: 'User',
+      role: payload.role,
+      credits: 999999,
+      isPremium: true,
+      plan: 'MASTERY',
+    },
     payload,
   }
 }

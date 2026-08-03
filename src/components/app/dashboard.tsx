@@ -75,14 +75,15 @@ export function Dashboard() {
               {connected ? <Wifi className="size-3 text-[#1e8e3e]" /> : <WifiOff className="size-3 text-[#9aa0a6]" />}
               <span className={connected ? 'text-[#1e8e3e] font-medium' : 'text-[#9aa0a6]'}>{connected ? 'Live' : 'Offline'}</span>
             </div>
-            <div className="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border bg-[#f9ab00]/10 border-[#f9ab00]/30">
-              <Zap className="size-3 text-[#f9ab00]" />
-              <span className="font-semibold text-[#f9ab00]">{user?.credits ?? 0}</span>
-              <span className="text-[#f9ab00]/70 text-[10px]">cr</span>
+            <div className="hidden sm:flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full border bg-emerald-500/10 border-emerald-500/30">
+              {/* TEMP BYPASS — credits badge replaced with "Premium Active" while Dream11/My11Circle are free. Revert to credits badge when fantasy platforms stop being free. */}
+              <Crown className="size-3 text-emerald-500" />
+              <span className="font-semibold text-emerald-500">PREMIUM</span>
             </div>
             <div className="hidden md:block">
               <p className="font-medium leading-tight text-white text-sm">{user?.name || 'User'}</p>
-              <p className="text-[#9aa0a6] leading-tight text-xs">{user?.credits ?? 0} credits available</p>
+              {/* TEMP BYPASS — replaced "X credits available" with "All features unlocked" while Dream11/My11Circle are free. */}
+              <p className="text-emerald-500 leading-tight text-xs">All features unlocked</p>
             </div>
           </div>
         </div>
