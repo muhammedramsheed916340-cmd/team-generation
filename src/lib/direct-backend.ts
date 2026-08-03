@@ -17,6 +17,7 @@ const BACKEND = 'https://tgsoftware-api.online'
 async function post<T = any>(path: string, body: any): Promise<T> {
   const res = await fetch(`${BACKEND}${path}`, {
     method: 'POST',
+    credentials: 'include',  // send + receive cookies (session from auth/verify)
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json, text/plain, */*',
@@ -35,6 +36,7 @@ async function post<T = any>(path: string, body: any): Promise<T> {
 async function get<T = any>(path: string): Promise<T> {
   const res = await fetch(`${BACKEND}${path}`, {
     method: 'GET',
+    credentials: 'include',  // send + receive cookies
     headers: { 'Accept': 'application/json, text/plain, */*' },
   })
   const text = await res.text()

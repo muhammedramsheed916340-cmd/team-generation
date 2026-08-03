@@ -395,30 +395,74 @@ function NewTransferPanel({ accounts, onDone }: any) {
   useEffect(() => { if (matchId) void generateTeams() }, [matchId])
 
   const submit = async () => {
+    if (!accountId) { toast.error('Select a linked account first'); return }
     if (!selectedTeam) { toast.error('Select a team to transfer'); return }
     setSubmitting(true)
     try {
-      // Transfer is handled by teamgeneration.in directly.
-      // The backend (tgsoftware-api.online) only accepts requests from
-      // teamgeneration.in's domain, so we redirect the user there with
-      // the match pre-selected. They can generate and transfer teams on
-      // teamgeneration.in which works 100%.
+      const selAccount = accounts.find((a: any) => a.id === accountId)
+      if (!selAccount?.authToken) {
+        throw new Error('Account not linked. Please link your fantasy account via OTP first.')
+      }
+
+      // Transfer directly from the browser to tgsoftware-api.online.
+      // Same flow as teamgeneration.in:
+      //   1. auth/verify (validates token, establishes browser session via cookies)
+      //   2. addteam (uses the session from step 1, returns encrypted link)
+      //   3. decrypt the link and open it
       //
-      // No fantasy account linking is required for link-based transfer
-      // (user clicks the generated link to complete on Dream11).
-      const selMatch = matches.find((m) => m.id === matchId)
-      // teamgeneration.in uses /match/:id route for match pages
-      const matchUrl = selMatch
-        ? `https://teamgeneration.in/match/${matchId}`
-        : 'https://teamgeneration.in/'
+      // Browser automatically maintains cookies between auth/verify and addteam,
+      // which is why this works from the browser but failed from server-side.
+      const playerIds = selectedTeam.players.map((p: any) => String(p.id))
+      const captainId = String(selectedTeam.captainId)
+      const viceCaptainId = String(selectedTeam.viceCaptainId)
+      const platform = selAccount.platform || 'DREAM11'
 
-      // Open teamgeneration.in in a new tab with the match pre-selected
-      window.open(matchUrl, '_blank')
+      let successCount = 0
+      let failedCount = 0
+      const transferLinks: string[] = []
+      const errors: string[] = []
 
-      toast.success('Opening match on teamgeneration.in...', {
-        description: `Match: ${selMatch ? selMatch.team1 + ' vs ' + selMatch.team2 : 'selected'} — generate teams and click transfer there`,
-        duration: 6000,
-      })
+      for (let i = 0; i < totalTeams[0]; i++) {
+        const result = await executeTransferDirect({
+          platform,
+          authToken: selAccount.authToken,
+          matchId,
+          playerIds,
+          captainId,
+          viceCaptainId,
+          extras: {
+            my11circleChallenge: selAccount.my11circleChallenge,
+            my11circleUserId: selAccount.my11circleUserId,
+            mobileNumber: selAccount.mobile,
+          },
+        })
+        if (result.success && result.transferLink) {
+          successCount++
+          transferLinks.push(result.transferLink)
+        } else {
+          failedCount++
+          errors.push(result.error || 'Unknown error')
+        }
+        // Update token if refreshed
+        if (result.refreshedAuthToken) {
+          selAccount.authToken = result.refreshedAuthToken
+          const ACCOUNTS_KEY = 'tg_fantasy_accounts'
+          const all = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || '[]')
+          const idx = all.findIndex((a: any) => a.id === accountId)
+          if (idx >= 0) { all[idx].authToken = result.refreshedAuthToken; localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(all)) }
+        }
+      }
+
+      if (successCount > 0) {
+        // Open the first link — user completes on Dream11
+        if (transferLinks[0]) window.open(transferLinks[0], '_blank')
+        toast.success(`Transferred ${successCount} team(s)!`, {
+          description: transferLinks.length > 1 ? `${transferLinks.length} links ready — first one opened.` : 'Dream11 link opened in new tab.',
+          duration: 6000,
+        })
+      } else {
+        toast.error(errors[0] || 'Transfer failed. Try re-linking your account.')
+      }
       onDone()
     } catch (e: any) { toast.error(e.message) }
     finally { setSubmitting(false) }
@@ -427,8 +471,19 @@ function NewTransferPanel({ accounts, onDone }: any) {
   return (
     <div className="grid md:grid-cols-2 gap-4">
       <Card>
-        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Send className="size-4" /> Transfer to Dream11</CardTitle><CardDescription>Select a match and team, then click transfer to open the pre-filled team link</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="text-base flex items-center gap-2"><Send className="size-4" /> Transfer to Dream11</CardTitle><CardDescription>Select your linked account, a match, and a team — transfer opens the Dream11 pre-fill link</CardDescription></CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label>Account</Label>
+            <Select value={accountId} onValueChange={setAccountId}>
+              <SelectTrigger><SelectValue placeholder="Select linked account" /></SelectTrigger>
+              <SelectContent>
+                {accounts.length === 0
+                  ? <SelectItem value="none" disabled>No accounts linked — go to Accounts tab</SelectItem>
+                  : accounts.map((a: any) => <SelectItem key={a.id} value={a.id}>{a.platform} · {a.mobile}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-2">
             <Label>Match</Label>
             <Select value={matchId} onValueChange={setMatchId}>
@@ -437,15 +492,15 @@ function NewTransferPanel({ accounts, onDone }: any) {
             </Select>
           </div>
           <div className="space-y-2">
-            <div className="flex justify-between"><Label>Number of teams to generate</Label><Badge variant="secondary" className="font-mono">{totalTeams[0]}</Badge></div>
+            <div className="flex justify-between"><Label>Number of teams</Label><Badge variant="secondary" className="font-mono">{totalTeams[0]}</Badge></div>
             <Slider value={totalTeams} onValueChange={setTotalTeams} min={1} max={20} step={1} />
           </div>
-          <Button onClick={submit} disabled={submitting || !selectedTeam} className="w-full">
+          <Button onClick={submit} disabled={submitting || !selectedTeam || !accountId || accounts.length === 0} className="w-full">
             {submitting ? <Loader2 className="size-4 animate-spin" /> : <Send className="size-4" />}
             Transfer Team to Dream11
           </Button>
           <p className="text-xs text-muted-foreground text-center">
-            Opens teamgeneration.in with the match pre-selected. Generate teams there and click transfer to get your Dream11 pre-fill link. No login required.
+            Link your Dream11/My11Circle account via OTP (Accounts tab), then transfer teams directly. The Dream11 pre-fill link opens in a new tab.
           </p>
         </CardContent>
       </Card>
