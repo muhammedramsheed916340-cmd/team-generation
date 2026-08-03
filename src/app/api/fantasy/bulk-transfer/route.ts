@@ -2,31 +2,16 @@ import { NextRequest } from 'next/server'
 import { authenticate } from '@/lib/auth'
 import { apiHandler, ok, fail, parseBody, getClientIp } from '@/lib/api'
 import { rateLimitByIp, FANTASY_LIMITS } from '@/lib/rate-limit'
-
-const REAL_BACKEND = 'https://tgsoftware-api.online'
+import { executeTransfer } from '@/app/api/fantasy/_transfer-engine'
 
 /**
  * POST /api/fantasy/bulk-transfer
+ * Performs the full transfer flow:
+ *   1. /api/fantasy/auth/verify (establishes server session with OTP authToken)
+ *   2. /api/classic/<platform>/addteam (actual transfer, returns encrypted link)
  *
- * Proxies to teamgeneration.in's transfer API:
- *   POST /api/classic/dream11/addteam
- *   POST /api/classic/my11circle/addteam
- *
- * teamgeneration.in returns a LINK that pre-fills the team on Dream11.
- * The user clicks the link to complete the transfer on Dream11.
- *
- * Payload (from JS analysis):
- *   {
- *     tgMatchId: "<match_id>",
- *     playerData: ["<pl_id>", "<pl_id>", ...],  // array of player ID strings
- *     captainData: "<pl_id>",                   // captain pl_id string
- *     vicecaptainData: "<pl_id>",               // VC pl_id string
- *     generateLinkFlag: "general"
- *   }
- *
- * Response from teamgeneration.in:
- *   { status: "success", data: "<encrypted_link_data>" }
- *   The link is extracted and returned to the frontend.
+ * FIX (2026-08-03): Previously called addteam directly without the verify step,
+ * causing "Error while transfering the team!" (HTTP 404) on every transfer.
  */
 export const POST = apiHandler(async (req: NextRequest) => {
   const auth = await authenticate(req)
@@ -39,88 +24,21 @@ export const POST = apiHandler(async (req: NextRequest) => {
     platform?: string; mode: string; totalTeams: number; template: any;
   }>(req)
 
-  if (!body.accountId || !body.matchName || !body.mode || !body.template) {
-    return fail('accountId, matchName, mode, template required', 400, 'VALIDATION_ERROR')
-  }
-  if (body.totalTeams < 1 || body.totalTeams > 500) {
-    return fail('totalTeams must be 1-500', 400, 'VALIDATION_ERROR')
-  }
+  const result = await executeTransfer(body, auth.user.id)
 
-  const t = body.template
-  const matchId = body.matchId || body.matchName
-
-  // Build playerData: array of pl_id strings
-  const playerData = t.players.map((p: any) => String(p.externalId))
-  const captainData = String(t.captainExternalId)
-  const vicecaptainData = String(t.viceCaptainExternalId)
-
-  // Build EXACT payload matching teamgeneration.in's format
-  const transferPayload = {
-    tgMatchId: String(matchId),
-    playerData,
-    captainData,
-    vicecaptainData,
-    generateLinkFlag: 'general',
-  }
-
-  const platform = (body.platform || 'DREAM11').toLowerCase()
-  const endpoint = `/api/classic/${platform}/addteam`
-
-  console.log('[bulk-transfer] Sending to teamgeneration.in:', { endpoint, payload: JSON.stringify(transferPayload).slice(0, 500) })
-
-  let successCount = 0
-  let failedCount = 0
-  const errors: string[] = []
-  const transferLinks: string[] = []
-
-  for (let i = 0; i < body.totalTeams; i++) {
-    try {
-      const res = await fetch(`${REAL_BACKEND}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify(transferPayload),
-        signal: AbortSignal.timeout(15000),
-      })
-
-      const text = await res.text()
-      console.log(`[bulk-transfer] Team ${i + 1} response:`, { status: res.status, body: text.slice(0, 500) })
-
-      let json: any
-      try { json = JSON.parse(text) } catch { json = { status: 'fail', message: 'Invalid response' } }
-
-      if (res.status === 200 && (json.status === 'success' || json.success === true)) {
-        successCount++
-        // Extract the transfer link from the response
-        // teamgeneration.in returns encrypted link data in json.data
-        if (json.data) {
-          if (typeof json.data === 'string') {
-            transferLinks.push(json.data)
-          } else if (json.data.link) {
-            transferLinks.push(json.data.link)
-          } else if (json.data.url) {
-            transferLinks.push(json.data.url)
-          }
-        }
-      } else {
-        failedCount++
-        errors.push(json.message || `Team ${i + 1} failed (HTTP ${res.status})`)
-      }
-    } catch (e: any) {
-      console.error(`[bulk-transfer] Team ${i + 1} error:`, e.message)
-      failedCount++
-      errors.push(e.message)
-    }
+  if (!result.success) {
+    return fail(result.error || 'Transfer failed', result.status || 400, result.code || 'TRANSFER_ERROR')
   }
 
   return ok({
-    queueId: `q-${Date.now()}`,
-    status: 'COMPLETED',
-    totalTeams: body.totalTeams,
-    successCount,
-    failedCount,
-    errors: errors.slice(0, 5),
-    transferLinks,
-    provider: 'teamgeneration.in',
-    endpoint,
+    queueId: result.queueId,
+    status: result.status_text,
+    totalTeams: result.totalTeams,
+    successCount: result.successCount,
+    failedCount: result.failedCount,
+    errors: result.errors,
+    transferLinks: result.transferLinks,
+    provider: result.provider,
+    endpoint: result.endpoint,
   }, 202)
 })
