@@ -24,6 +24,7 @@ export function SubscriptionsTab() {
       setLicenses(l.licenses)
     } catch (e: any) { toast.error(e.message) }
   }
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void load() }, [])
 
   return (
