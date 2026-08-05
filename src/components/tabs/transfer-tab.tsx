@@ -454,12 +454,8 @@ function NewTransferPanel({ accounts, onDone }: any) {
       }
 
       if (successCount > 0) {
-        // Open the first link — user completes on Dream11
-        if (transferLinks[0]) window.open(transferLinks[0], '_blank')
-        toast.success(`Transferred ${successCount} team(s)!`, {
-          description: transferLinks.length > 1 ? `${transferLinks.length} links ready — first one opened.` : 'Dream11 link opened in new tab.',
-          duration: 6000,
-        })
+        // Direct transfer succeeded — no link opening needed
+        toast.success(`${successCount} team(s) transferred successfully!`)
       } else {
         toast.error(errors[0] || 'Transfer failed. Try re-linking your account.')
       }

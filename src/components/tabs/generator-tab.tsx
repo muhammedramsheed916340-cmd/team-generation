@@ -79,18 +79,11 @@ export function GeneratorTab() {
         platform: account.platform || 'DREAM11',
         template,
       })
-      if (res.failedCount > 0 && res.successCount === 0) {
-        toast.error(`Transfer failed: ${res.errors?.[0] || 'Unknown error'}`)
+      // Show success ONLY when backend confirms transfer succeeded
+      if (res.successCount > 0) {
+        toast.success(`Team transferred successfully to ${account.platform}!`)
       } else {
-        // If transfer links returned, open them
-        if (res.transferLinks && res.transferLinks.length > 0) {
-          res.transferLinks.forEach((link: string) => {
-            window.open(link, '_blank')
-          })
-          toast.success(`Transfer link opened! ${res.successCount} team(s) ready on Dream11`)
-        } else {
-          toast.success(`Team transferred! ${res.successCount} success, ${res.failedCount} failed`)
-        }
+        toast.error(`Transfer failed: ${res.errors?.[0] || 'Unknown error'}`)
       }
     } catch (e: any) {
       toast.error('Transfer failed: ' + e.message)
